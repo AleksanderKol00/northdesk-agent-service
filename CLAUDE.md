@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Backend service (FastAPI, Python 3.14, managed with `uv`) for Northdesk, a fictional software company whose support team receives tickets (password problems, billing questions, outages, spam). Each ticket is processed in several steps with the help of an AI agent, and the service must keep working when the AI or other downstream services fail temporarily — resilience to transient failures is a core design goal, not an afterthought.
 
-Built so far: the decision agent, the decision checks and the fake Helpdesk client. The workflow engine (Temporal), the ticket API endpoints and Docker Compose are not built yet; `main.py` only has `/health`.
+Built so far: the decision agent, the decision checks, the fake Helpdesk client, and the Temporal activities and worker. The ticket workflow, the ticket API endpoints and Docker Compose are not built yet; `main.py` only has `/health`.
 
 ## Architecture
 
@@ -24,6 +24,9 @@ Packages under `src/northdesk_ticket_agent/`, kept separate on purpose:
   - `llm/fake_client.py`: a deterministic rule-based stand-in (no key, no network). It is deliberately gullible, so the rules are what block bad decisions.
   - `llm/factory.py`: chooses the client by `LLM_MODE`.
   - `helpdesk.py`: `FakeHelpdesk.perform(ticket_id, action, idempotency_key)` carries out the final action and returns a `HelpdeskReceipt`. It fails at random (`HELPDESK_FAILURE_RATE`) with `HelpdeskTemporaryError`; half of those failures happen after the action was done (lost response). A repeated key returns the first receipt, so a retry never acts twice; reusing a key for a different request raises `HelpdeskConflictError` (permanent), checked before any random failure. Receipts are frozen and stored/returned as copies. State is in memory, per process.
+- `orchestration/` — Temporal.
+  - `activities.py`: `TicketActivities` with `decide` (runs the agent), `check` (wraps `check_decision`, loading the ticket customer's invoices and the article ids) and `act` (calls the Helpdesk with idempotency key `<ticket_id>:<action type>`). Activity names are `ticket.decide`, `ticket.check`, `ticket.act`. Known errors become an `ApplicationError` whose `type` is the original class name: a `TemporaryServiceError` is retryable; any other `ServiceError` and every `AgentError` are non-retryable. Unexpected errors are left to the workflow's retry policy.
+  - `worker.py`: `build_activities(settings)` builds the data store, agent and Helpdesk once per process. The Helpdesk's idempotency keys are in memory, so a retry is deduplicated only if it reaches the same process: run one worker, since Temporal may send retries to any worker and a restart forgets the keys. `run_worker` connects with the pydantic data converter and polls `TEMPORAL_TASK_QUEUE`. Entry point: `uv run northdesk-worker`.
 - `config.py` — `Settings` (pydantic-settings, env vars / `.env`; see `.env.example`). Use `TicketAgent.from_settings(settings, store)` so the env limits apply.
 
 Invariants to keep when changing the agent:
@@ -37,6 +40,7 @@ Invariants to keep when changing the agent:
 ```sh
 uv sync                                                   # install deps (incl. dev group)
 uv run fastapi dev src/northdesk_ticket_agent/main.py     # dev server with reload on :8000
+uv run northdesk-worker                                   # Temporal worker (needs a server at TEMPORAL_ADDRESS)
 uv run pytest                                             # all tests
 uv run pytest tests/unit                                  # unit tests only
 uv run pytest tests/integration                           # integration tests only
@@ -55,7 +59,7 @@ The FastAPI entrypoint is configured in `pyproject.toml` as `northdesk_ticket_ag
 
 Ruff: line length 120; rules `E, F, I, UP, B` plus `S` (bandit), `BLE`, `ASYNC`, `SIM`, `C4`, `PIE`, `RET`, `RUF`, `PT`, `TID` (relative imports are banned; import sorting is `I`, formatting is `ruff format`). Don't use `assert` for checks in `src/` (stripped under `-O`); use explicit guards. mypy runs in `strict` mode with the pydantic plugin over `src` and `tests`.
 
-import-linter (`[tool.importlinter]` in `pyproject.toml`) enforces the package boundaries above: layers `main → agent → services → domain`, `domain` imports no FastAPI/OpenAI/config, and only `services/llm/openai_client.py` imports `openai` directly.
+import-linter (`[tool.importlinter]` in `pyproject.toml`) enforces the package boundaries above: layers `main → orchestration → agent → services → domain`, `domain` imports no FastAPI/OpenAI/config, only `services/llm/openai_client.py` imports `openai` directly, and `temporalio` stays out of `agent`, `services` and `domain`.
 
 Pre-commit (`.pre-commit-config.yaml`): file hygiene, no commits on `main`, gitleaks (secrets), typos, `uv lock --check`, ruff, mypy, import-linter, deptry (every third-party import in `src/` must be a declared dependency) on commit; pytest with coverage on push (branch coverage, `fail_under = 90` in `[tool.coverage.report]`). Keep coverage up when adding code instead of lowering the threshold. Hooks run through `uv run`, so tool versions come from `uv.lock`.
 
@@ -78,5 +82,5 @@ Secrets: the `gitleaks` hook scans staged changes on commit; the `gitleaks-histo
 - `tests/integration/` — exercise the app over HTTP via `TestClient` and real wiring.
 - `tests/fixtures/` — shared pytest fixtures, one module per area: `client.py` (`client` TestClient), `data.py` (`datastore`, `example_tickets` keyed by ticket id), `helpdesk.py` (`helpdesk`, a `FakeHelpdesk` that never fails), `llm.py` (`scripted_llm` factory replaying canned `LLMResponse`s; the `tool_call()` helper builds them). New fixture modules must be registered in `tests/conftest.py` via `pytest_plugins`.
 - Async tests need no marker: `asyncio_mode = "auto"` (pytest-asyncio).
-- Tests never need network or an API key; use the fake LLM or `scripted_llm`.
+- Tests never need network or an API key; use the fake LLM or `scripted_llm`. Activities are tested with Temporal's `ActivityEnvironment`, which needs no server.
 - No `__init__.py` files anywhere under `tests/`. Pytest runs with `--import-mode=importlib` and `pythonpath = ["."]`, so test directories have no package-name collisions and fixtures are imported as `tests.fixtures.<module>` (namespace packages); mypy uses `explicit_package_bases` with `mypy_path = ["src", "."]` for the same reason.
