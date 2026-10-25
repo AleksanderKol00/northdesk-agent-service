@@ -1,0 +1,21 @@
+# Only pyproject.toml, uv.lock, README.md and src/ go into the image.
+.git/
+.github/
+.venv/
+.claude/
+.vscode/
+.idea/
+tests/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.import_linter_cache/
+.coverage
+htmlcov/
+
+# Secrets reach the containers through the environment, never the image.
+.env
+.env.*
