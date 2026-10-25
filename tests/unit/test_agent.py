@@ -107,3 +107,20 @@ async def test_stops_after_step_limit(
     llm = scripted_llm(*[tool_call("get_customer", call_id=f"c{i}") for i in range(3)])
     with pytest.raises(AgentStepLimitError):
         await TicketAgent(llm, datastore, max_steps=3).decide(example_tickets["T-1"])
+
+
+async def test_only_the_first_of_two_decisions_in_one_turn_counts(
+    scripted_llm: ScriptedLLMFactory, datastore: DataStore, example_tickets: dict[str, Ticket]
+) -> None:
+    other = {**CLOSE, "reason": "second"}
+    two = LLMResponse(
+        tool_calls=[
+            *tool_call("submit_decision", CLOSE, call_id="a").tool_calls,
+            *tool_call("submit_decision", other, call_id="b").tool_calls,
+        ]
+    )
+    llm = scripted_llm(two)
+
+    decision = await TicketAgent(llm, datastore).decide(example_tickets["T-5"])
+
+    assert decision.reason == "spam"

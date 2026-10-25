@@ -1,12 +1,14 @@
+import json
 from typing import Any
 
 import pytest
 
 from northdesk_ticket_agent.agent.agent import TicketAgent
 from northdesk_ticket_agent.agent.errors import UnknownCustomerError
-from northdesk_ticket_agent.domain.models import Decision, Ticket
+from northdesk_ticket_agent.domain.models import Decision, RefundAction, ReplyAction, Ticket
 from northdesk_ticket_agent.domain.rules import check_decision
 from northdesk_ticket_agent.services.datastore import DataStore
+from northdesk_ticket_agent.services.llm.base import Message, ToolCall
 from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
 
 
@@ -93,3 +95,51 @@ async def test_refund_of_zero_is_not_replaced_by_the_invoice_amount(datastore: D
     ticket = Ticket(ticket_id="T-X", customer_id="C-100", subject="Refund", body="Refund 0 EUR.")
     proposed = await TicketAgent(FakeLLMClient(), datastore).decide(ticket)
     assert proposed.amount_eur == 0.0
+
+
+async def test_refund_request_without_invoices_is_escalated(datastore: DataStore) -> None:
+    ticket = Ticket(ticket_id="T-X", customer_id="C-200", subject="Refund", body="Please refund my last payment.")
+    decision = await decide_and_check(ticket, datastore)
+    assert (decision.category, decision.action.type) == ("billing", "escalate")
+
+
+async def test_double_charge_without_a_duplicate_invoice_refunds_the_first(datastore: DataStore) -> None:
+    ticket = Ticket(ticket_id="T-X", customer_id="C-300", subject="Charged twice", body="We were charged twice.")
+    decision = await decide_and_check(ticket, datastore)
+    assert isinstance(decision.action, RefundAction)
+    assert decision.action.invoice_id == "INV-3001"
+
+
+async def test_other_questions_get_the_best_matching_article(datastore: DataStore) -> None:
+    ticket = Ticket(ticket_id="T-X", customer_id="C-200", subject="Status page", body="Where is the status page?")
+    decision = await decide_and_check(ticket, datastore)
+    assert decision.category == "other"
+    assert isinstance(decision.action, ReplyAction)
+    assert decision.action.article_ids == ["KB-3"]
+
+
+@pytest.mark.parametrize(
+    "user_message",
+    [
+        "no ticket here",
+        "<ticket>\n{not json\n</ticket>",
+        '<ticket>\n["a list"]\n</ticket>',
+    ],
+)
+async def test_unreadable_ticket_is_treated_as_empty(user_message: str) -> None:
+    response = await FakeLLMClient().complete([Message(role="user", content=user_message)], [])
+    query = json.loads(next(c.arguments for c in response.tool_calls if c.name == "search_kb"))
+    assert query == {"query": ""}
+
+
+async def test_unreadable_tool_result_is_ignored() -> None:
+    messages = [
+        Message(role="user", content='<ticket>\n{"subject": "Hi", "body": "pizza?"}\n</ticket>'),
+        Message(role="assistant", tool_calls=[ToolCall(id="c1", name="search_kb", arguments="{}")]),
+        Message(role="tool", tool_call_id="c1", content="not json"),
+        Message(role="assistant", tool_calls=[ToolCall(id="c2", name="get_customer", arguments="{}")]),
+        Message(role="tool", tool_call_id="c2", content="{}"),
+    ]
+    response = await FakeLLMClient().complete(messages, [])
+    decision = json.loads(response.tool_calls[0].arguments)
+    assert decision["action"] == "close"
