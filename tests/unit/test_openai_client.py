@@ -101,3 +101,9 @@ async def test_request_errors_are_permanent(status: int) -> None:
     client, _ = make_client(status_error(status))
     with pytest.raises(LLMPermanentError):
         await client.complete([Message(role="user", content="hi")], TOOLS)
+
+
+async def test_a_response_without_choices_is_transient() -> None:
+    client, _ = make_client(SimpleNamespace(choices=[]))
+    with pytest.raises(LLMTransientError, match="no choices"):
+        await client.complete([Message(role="user", content="hi")], TOOLS)

@@ -9,6 +9,7 @@ from northdesk_ticket_agent.domain.models import Ticket
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.llm.factory import build_llm_client
 from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
+from northdesk_ticket_agent.services.llm.openai_client import OpenAIClient
 
 
 def settings(**values: Any) -> Settings:
@@ -38,3 +39,8 @@ async def test_agent_uses_limits_from_settings(datastore: DataStore, example_tic
 def test_helpdesk_failure_rate_must_be_between_zero_and_one(rate: float) -> None:
     with pytest.raises(ValueError, match="helpdesk_failure_rate"):
         settings(helpdesk_failure_rate=rate)
+
+
+def test_openai_mode_with_a_key_builds_the_openai_client() -> None:
+    client = build_llm_client(settings(llm_mode="openai", openai_api_key="sk-test"))
+    assert isinstance(client, OpenAIClient)
