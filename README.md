@@ -8,6 +8,20 @@ receives many tickets every day: password problems, billing questions, outages, 
 The service processes each ticket in several steps with the help of an AI agent, and is designed
 to keep working when the AI or other downstream services fail temporarily.
 
+## Running with Docker
+
+```sh
+cp .env.example .env        # optional: the defaults run with LLM_MODE=fake and no API key
+docker compose up --build
+```
+
+This starts the Temporal dev server, the API and the worker. The API is on http://localhost:8000 (docs at `/docs`)
+and the Temporal web UI on http://localhost:8233. Temporal keeps its state in a volume, so
+`docker compose down` keeps the workflow history and `docker compose down -v` wipes it.
+
+Run a single worker (don't `--scale` it, and don't also start `uv run northdesk-worker` against the same server):
+see [Known limitations](#known-limitations).
+
 ## Development
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on every push: the pre-commit hooks plus a secret scan of the full history, and the tests with the 90% coverage threshold.

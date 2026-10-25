@@ -1,0 +1,58 @@
+# The whole stack: Temporal (server + web UI), the API and the worker.
+#   docker compose up --build
+# API: http://localhost:8000 (docs at /docs) · Temporal UI: http://localhost:8233
+name: northdesk
+
+# Shared by the API and the worker: one image, settings from .env (optional; defaults work with LLM_MODE=fake).
+x-app: &app
+  build: .
+  image: northdesk-ticket-agent:local
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    TEMPORAL_ADDRESS: temporal:7233
+  depends_on:
+    temporal:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  # Temporal's single-binary dev server, with the web UI on 8233. Its state is kept in a SQLite file on a volume,
+  # so workflows survive a restart; `docker compose down -v` wipes it.
+  temporal:
+    image: temporalio/temporal:1.9.1
+    command: [server, start-dev, --ip, 0.0.0.0, --db-filename, /home/temporal/temporal.db]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    volumes:
+      - temporal-data:/home/temporal
+    healthcheck:
+      test: [CMD, temporal, operator, cluster, health, --address, localhost:7233]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    # Like the app services, so a Docker restart brings the whole stack back (depends_on only applies to `up`).
+    restart: unless-stopped
+
+  api:
+    <<: *app
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # Keep a single worker: the fake Helpdesk's idempotency keys live in its memory (see README, Known limitations).
+  # Don't scale it, and don't also run `uv run northdesk-worker` against this server.
+  worker:
+    <<: *app
+    command: [northdesk-worker]
+
+volumes:
+  temporal-data:

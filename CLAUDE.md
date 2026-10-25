@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Backend service (FastAPI, Python 3.14, managed with `uv`) for Northdesk, a fictional software company whose support team receives tickets (password problems, billing questions, outages, spam). Each ticket is processed in several steps with the help of an AI agent, and the service must keep working when the AI or other downstream services fail temporarily — resilience to transient failures is a core design goal, not an afterthought.
 
-Built so far: the decision agent, the decision checks, the fake Helpdesk client, and the Temporal activities and worker. The ticket workflow, the ticket API endpoints and Docker Compose are not built yet; `main.py` only has `/health`.
+Built so far: the decision agent, the decision checks, the fake Helpdesk client, and the Temporal activities and worker. Docker Compose runs Temporal, the API and the worker. The ticket workflow and the ticket API endpoints are not built yet; `main.py` only has `/health`.
 
 ## Architecture
 
@@ -27,6 +27,7 @@ Packages under `src/northdesk_ticket_agent/`, kept separate on purpose:
 - `orchestration/` — Temporal.
   - `activities.py`: `TicketActivities` with `decide` (runs the agent), `check` (wraps `check_decision`, loading the ticket customer's invoices and the article ids) and `act` (calls the Helpdesk with idempotency key `<ticket_id>:<action type>`). Activity names are `ticket.decide`, `ticket.check`, `ticket.act`. Known errors become an `ApplicationError` whose `type` is the original class name: a `TemporaryServiceError` is retryable; any other `ServiceError` and every `AgentError` are non-retryable. Unexpected errors are left to the workflow's retry policy.
   - `worker.py`: `build_activities(settings)` builds the data store, agent and Helpdesk once per process. The Helpdesk's idempotency keys are in memory, so a retry is deduplicated only if it reaches the same process: run one worker, since Temporal may send retries to any worker and a restart forgets the keys. `run_worker` connects with the pydantic data converter and polls `TEMPORAL_TASK_QUEUE` until SIGTERM/SIGINT (`stop_on_signals`), then shuts down gracefully, giving running activities `GRACEFUL_SHUTDOWN` (8 s, under Docker's 10 s stop timeout). The handler matters in a container, where the worker is PID 1 and an unhandled SIGTERM is ignored. Entry point: `uv run northdesk-worker`.
+- `Dockerfile` / `docker-compose.yml` (repo root) — one single-stage image (uv, non-editable install, runs as non-root) runs both the API (`fastapi run`) and the worker (`northdesk-worker`). Compose adds Temporal's dev server (`temporalio/temporal`, UI on 8233, SQLite state on a volume) and points both at it with `TEMPORAL_ADDRESS=temporal:7233`; `.env` is optional. Keep one worker (see `worker.py`). Image tags are pinned; bump them deliberately.
 - `config.py` — `Settings` (pydantic-settings, env vars / `.env`; see `.env.example`). Use `TicketAgent.from_settings(settings, store)` so the env limits apply.
 
 Invariants to keep when changing the agent:
@@ -41,6 +42,7 @@ Invariants to keep when changing the agent:
 uv sync                                                   # install deps (incl. dev group)
 uv run fastapi dev src/northdesk_ticket_agent/main.py     # dev server with reload on :8000
 uv run northdesk-worker                                   # Temporal worker (needs a server at TEMPORAL_ADDRESS)
+docker compose up --build                                 # whole stack: Temporal (UI :8233), API (:8000), worker
 uv run pytest                                             # all tests
 uv run pytest tests/unit                                  # unit tests only
 uv run pytest tests/integration                           # integration tests only
