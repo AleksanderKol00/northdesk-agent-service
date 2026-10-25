@@ -148,11 +148,13 @@ async def test_approved_refund_is_issued(
     async with running(workflow_env, fakes.all(), example_tickets["T-2"]) as handle:
         waiting = await wait_for_step(handle, Step.AWAITING_APPROVAL)
         assert fakes.acted == []
-        await handle.execute_update(TicketWorkflow.approve, Approval(approved=True))
+        answered = await handle.execute_update(TicketWorkflow.approve, Approval(approved=True))
         state = await handle.result()
 
     refund = RefundAction(invoice_id="INV-1002", amount_eur=49.0)
     assert waiting.action == refund
+    assert answered.step == Step.ACTING  # the update returns once the workflow has acted on the answer
+    assert answered.action == refund
     assert state.step == Step.DONE
     assert state.approval == Approval(approved=True)
     assert state.action == refund
@@ -166,10 +168,14 @@ async def test_rejected_refund_is_escalated(
 
     async with running(workflow_env, fakes.all(), example_tickets["T-2"]) as handle:
         await wait_for_step(handle, Step.AWAITING_APPROVAL)
-        await handle.execute_update(TicketWorkflow.approve, Approval(approved=False, comment="charged once only"))
+        answered = await handle.execute_update(
+            TicketWorkflow.approve, Approval(approved=False, comment="charged once only")
+        )
         state = await handle.result()
 
     reason = "The refund of 49.00 EUR on invoice INV-1002 was rejected: charged once only"
+    assert answered.step == Step.ACTING  # not still awaiting approval with the refund as the action
+    assert answered.action == EscalateAction(reason=reason)
     assert state.action == EscalateAction(reason=reason)
     assert state.decision is not None
     assert isinstance(state.decision.action, RefundAction)

@@ -148,10 +148,15 @@ class TicketWorkflow:
     def status(self) -> TicketState:
         return self._state
 
-    @workflow.update(name="approve")
-    def approve(self, approval: Approval) -> TicketState:
-        """Approve or reject the refund the workflow is waiting on. Refused by the validator when nothing is waiting."""
+    # The update is named after the method ("approve"). Passing `name=` would lose the async typing of the result.
+    @workflow.update
+    async def approve(self, approval: Approval) -> TicketState:
+        """Approve or reject the refund the workflow is waiting on. Refused by the validator when nothing is waiting.
+
+        Returns once the workflow has moved past the approval, so the state shows the action that follows from it.
+        """
         self._state.approval = approval
+        await workflow.wait_condition(lambda: self._state.step != Step.AWAITING_APPROVAL)
         return self._state
 
     @approve.validator
