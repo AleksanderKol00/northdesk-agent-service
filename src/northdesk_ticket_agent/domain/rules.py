@@ -54,14 +54,13 @@ def check_decision(
             else:
                 violations.append("close needs a reason")
 
-    if violations or action is None:
+    if violations or action is None or category is None or priority is None:
         return Decision(
             category=category or Category.OTHER,
             priority=priority or Priority.NORMAL,
             action=EscalateAction(reason="Decision failed checks: " + "; ".join(violations)),
             violations=violations,
         )
-    assert category is not None and priority is not None
     return Decision(category=category, priority=priority, action=action)
 
 
@@ -76,9 +75,8 @@ def _check_reply(
     unknown = [a for a in proposed.article_ids if a not in kb_article_ids]
     if unknown:
         violations.append(f"reply cites unknown articles: {', '.join(unknown)}")
-    if violations:
+    if violations or not message:
         return None
-    assert message is not None
     return ReplyAction(message=message, article_ids=list(proposed.article_ids))
 
 
@@ -88,39 +86,37 @@ def _check_refund(
     invoices: Iterable[Invoice],
     violations: list[str],
 ) -> RefundAction | None:
-    if not proposed.invoice_id:
+    invoice_id = proposed.invoice_id
+    if not invoice_id:
         violations.append("refund needs an invoice")
     amount = proposed.amount_eur
     if amount is None or not math.isfinite(amount) or amount <= 0:
         violations.append("refund needs an amount greater than 0")
-    if violations:
+    if violations or not invoice_id or amount is None:
         return None
-    assert proposed.invoice_id is not None and proposed.amount_eur is not None
 
     # Ownership is checked against the ticket's customer, never a customer the model names.
     invoice = next(
         (
             inv
             for inv in invoices
-            if inv.invoice_id == proposed.invoice_id and inv.customer_id == ticket.customer_id
+            if inv.invoice_id == invoice_id and inv.customer_id == ticket.customer_id
         ),
         None,
     )
     if invoice is None:
-        violations.append(
-            f"invoice {proposed.invoice_id} does not belong to customer {ticket.customer_id}"
-        )
+        violations.append(f"invoice {invoice_id} does not belong to customer {ticket.customer_id}")
         return None
     if invoice.status != "paid":
         violations.append(f"invoice {invoice.invoice_id} is {invoice.status}, only paid invoices")
         return None
-    if proposed.amount_eur > invoice.amount_eur:
+    if amount > invoice.amount_eur:
         violations.append(
-            f"refund {proposed.amount_eur:.2f} EUR is larger than invoice "
+            f"refund {amount:.2f} EUR is larger than invoice "
             f"{invoice.invoice_id} ({invoice.amount_eur:.2f} EUR)"
         )
         return None
-    return RefundAction(invoice_id=invoice.invoice_id, amount_eur=proposed.amount_eur)
+    return RefundAction(invoice_id=invoice.invoice_id, amount_eur=amount)
 
 
 def _parse_enum[E: (Category, Priority, ActionType)](

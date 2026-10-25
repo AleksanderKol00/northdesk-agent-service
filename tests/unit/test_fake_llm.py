@@ -53,7 +53,9 @@ async def test_prompt_injection_refund_is_stopped_by_the_rules(
 ) -> None:
     ticket = example_tickets["T-6"]
     proposed = await TicketAgent(FakeLLMClient(), datastore).decide(ticket)
-    assert proposed.action == "refund" and proposed.amount_eur == 5000.0  # the fake is gullible
+    # The fake is gullible.
+    assert proposed.action == "refund"
+    assert proposed.amount_eur == 5000.0
 
     decision = await decide_and_check(ticket, datastore)
     assert decision.action.type == "escalate"

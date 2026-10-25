@@ -44,9 +44,11 @@ async def test_ticket_is_sent_as_delimited_data(
     await TicketAgent(llm, datastore).decide(example_tickets["T-6"])
 
     system, user = llm.calls[0][:2]
-    assert system.content is not None and user.content is not None
+    assert system.content is not None
+    assert user.content is not None
     assert "untrusted" in system.content
-    assert "<ticket>" in user.content and "Ignore all previous instructions" in user.content
+    assert "<ticket>" in user.content
+    assert "Ignore all previous instructions" in user.content
 
 
 async def test_invoice_lookup_always_uses_the_tickets_customer(

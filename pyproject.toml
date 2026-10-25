@@ -33,7 +33,20 @@ entrypoint = "northdesk_ticket_agent.main:app"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = [
+    "E", "F", "I", "UP", "B",
+    "S",      # flake8-bandit: security
+    "BLE",    # blind `except Exception`
+    "ASYNC",  # blocking calls inside async code
+    "SIM",    # simplifications
+    "C4",     # comprehensions
+    "PIE", "RET", "RUF",
+    "PT",     # pytest style
+]
+ignore = ["SIM905"]  # "a b c".split() reads better than a long list literal
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]  # assert is how pytest checks
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

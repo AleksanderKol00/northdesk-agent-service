@@ -159,13 +159,16 @@ def _as_list(value: Any) -> list[dict[str, Any]]:
 
 def _find_ticket(messages: list[Message]) -> dict[str, Any]:
     for message in messages:
-        if message.role == "user" and message.content:
-            if match := _TICKET.search(message.content):
-                try:
-                    ticket = json.loads(match.group(1))
-                except json.JSONDecodeError:
-                    return {}
-                return ticket if isinstance(ticket, dict) else {}
+        if (
+            message.role == "user"
+            and message.content
+            and (match := _TICKET.search(message.content))
+        ):
+            try:
+                ticket = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                return {}
+            return ticket if isinstance(ticket, dict) else {}
     return {}
 
 
