@@ -3,7 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter, Response, status
 
-from northdesk_ticket_agent.api.dependencies import Workflows
+from northdesk_ticket_agent.api.dependencies import TicketId, Workflows
 from northdesk_ticket_agent.api.schemas import TicketStarted, TicketStatus
 from northdesk_ticket_agent.domain.models import Ticket
 from northdesk_ticket_agent.logs import bind_log_context
@@ -35,9 +35,8 @@ async def submit_ticket(ticket: Ticket, response: Response, workflows: Workflows
 
 
 @router.get("/{ticket_id}", responses=NOT_FOUND)
-async def get_ticket(ticket_id: str, workflows: Workflows) -> TicketStatus:
+async def get_ticket(ticket_id: TicketId, workflows: Workflows) -> TicketStatus:
     """The ticket's current step, its checked decision, and what was done."""
-    bind_log_context(ticket_id=ticket_id, workflow_id=ticket_id)
     state = await workflows.status(ticket_id)
     return TicketStatus(workflow_id=ticket_id, **state.model_dump())
 
@@ -49,9 +48,8 @@ async def get_ticket(ticket_id: str, workflows: Workflows) -> TicketStatus:
         status.HTTP_409_CONFLICT: {"description": "No refund is waiting for approval, or it was already answered"},
     },
 )
-async def approve_refund(ticket_id: str, approval: Approval, workflows: Workflows) -> TicketStatus:
+async def approve_refund(ticket_id: TicketId, approval: Approval, workflows: Workflows) -> TicketStatus:
     """Approve or reject the refund the ticket is waiting on. Returns the state with the action that follows."""
-    bind_log_context(ticket_id=ticket_id, workflow_id=ticket_id)
     state = await workflows.approve(ticket_id, approval)
     logger.info(
         "Refund %s",

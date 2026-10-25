@@ -1,7 +1,8 @@
 """One log line per request, with the ticket's IDs when the request is about a ticket.
 
 It replaces uvicorn's access log, which only knows the path. Each request runs in a `log_context` of its own; the
-endpoints bind the ticket's IDs to it, so this line and every line logged while handling the request carry them.
+endpoints bind the ticket's IDs to it, so this line and every line logged while handling the request carry them. An
+unhandled error is logged here too, with its traceback, and answered with a 500.
 """
 
 import logging
@@ -9,6 +10,7 @@ import time
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response, status
+from fastapi.responses import JSONResponse
 
 from northdesk_ticket_agent.logs import log_context
 
@@ -27,7 +29,13 @@ async def _log_request(request: Request, call_next: Callable[[Request], Awaitabl
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR  # what the client gets if the app raises
     with log_context():
         try:
-            response = await call_next(request)
+            try:
+                response = await call_next(request)
+            except Exception:
+                # Logged here, inside the request's context, so the traceback carries the ticket's IDs; re-raised, it
+                # would be logged by uvicorn outside it.
+                logger.exception("Unhandled error")
+                response = JSONResponse({"detail": "Internal Server Error"}, status_code=status_code)
             status_code = response.status_code
             return response
         finally:
