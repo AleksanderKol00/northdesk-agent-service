@@ -106,6 +106,20 @@ def test_approval_when_nothing_is_waiting_is_409(
     assert response.json() == {"detail": "ticket T-1 has no refund waiting for approval"}
 
 
+def test_a_second_approval_says_the_refund_was_already_answered(
+    client: TestClient, workflows: StubTicketWorkflows, example_tickets: dict[str, Ticket]
+) -> None:
+    client.post("/tickets", json=example_tickets["T-2"].model_dump())
+    await_refund_approval(workflows, "T-2")
+    client.post("/tickets/T-2/approval", json={"approved": True})
+
+    response = client.post("/tickets/T-2/approval", json={"approved": False})
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "the refund for ticket T-2 was already approved"}
+    assert workflows.states["T-2"].approval == Approval(approved=True)
+
+
 def test_approval_for_unknown_ticket_is_404(client: TestClient) -> None:
     response = client.post("/tickets/T-404/approval", json={"approved": True})
 

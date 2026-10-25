@@ -34,9 +34,12 @@ async def get_ticket(ticket_id: str, workflows: Workflows) -> TicketStatus:
 
 @router.post(
     "/{ticket_id}/approval",
-    responses={**NOT_FOUND, status.HTTP_409_CONFLICT: {"description": "No refund is waiting for approval"}},
+    responses={
+        **NOT_FOUND,
+        status.HTTP_409_CONFLICT: {"description": "No refund is waiting for approval, or it was already answered"},
+    },
 )
 async def approve_refund(ticket_id: str, approval: Approval, workflows: Workflows) -> TicketStatus:
-    """Approve or reject the refund the ticket is waiting on."""
+    """Approve or reject the refund the ticket is waiting on. Returns the state with the action that follows."""
     state = await workflows.approve(ticket_id, approval)
     return TicketStatus(workflow_id=ticket_id, **state.model_dump())

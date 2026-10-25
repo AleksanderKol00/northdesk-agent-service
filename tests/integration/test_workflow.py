@@ -208,13 +208,15 @@ async def test_approval_is_refused_when_no_refund_is_waiting(
     async with running(workflow_env, fakes.all(), example_tickets["T-2"]) as handle:
         await wait_for_step(handle, Step.AWAITING_APPROVAL)
         await handle.execute_update(TicketWorkflow.approve, Approval(approved=True))
-        with pytest.raises(WorkflowUpdateFailedError):  # a second answer to the same refund
+        with pytest.raises(WorkflowUpdateFailedError) as refused:  # a second answer to the same refund
             await handle.execute_update(TicketWorkflow.approve, Approval(approved=False))
         state = await handle.result()
 
         with pytest.raises(RPCError, match="not found"):  # the workflow is finished
             await handle.execute_update(TicketWorkflow.approve, Approval(approved=True))
 
+    assert isinstance(refused.value.cause, ApplicationError)
+    assert refused.value.cause.message == "the refund was already approved"
     assert state.approval == Approval(approved=True)
     assert len(fakes.acted) == 1
 
