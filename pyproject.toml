@@ -1,7 +1,7 @@
 [project]
 name = "northdesk-ticket-agent"
 version = "0.1.0"
-description = "Resilient backend that processes Northdesk support tickets in several steps with an AI agent."
+description = "Triages Northdesk support tickets with an LLM agent, checked rules and a Temporal workflow."
 readme = "README.md"
 authors = [
     { name = "Aleksander Kolowski", email = "kolowskialeksander@gmail.com" }
