@@ -97,10 +97,11 @@ root_packages = ["northdesk_ticket_agent"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Layers: main -> orchestration -> agent -> services -> domain"
+name = "Layers: main -> api -> orchestration -> agent -> services -> domain"
 type = "layers"
 layers = [
     "northdesk_ticket_agent.main",
+    "northdesk_ticket_agent.api",
     "northdesk_ticket_agent.orchestration",
     "northdesk_ticket_agent.agent",
     "northdesk_ticket_agent.services",
@@ -124,6 +125,7 @@ name = "Only the OpenAI adapter talks to the OpenAI SDK"
 type = "forbidden"
 source_modules = [
     "northdesk_ticket_agent.main",
+    "northdesk_ticket_agent.api",
     "northdesk_ticket_agent.agent",
     "northdesk_ticket_agent.domain",
     "northdesk_ticket_agent.services.datastore",
