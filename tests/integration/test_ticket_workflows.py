@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
+import httpx
 import pytest
 from temporalio import activity
 from temporalio.client import WorkflowUpdateFailedError
@@ -14,6 +15,7 @@ from temporalio.worker import Worker
 
 from northdesk_ticket_agent.agent.agent import TicketAgent
 from northdesk_ticket_agent.domain.models import ActionType, ProposedDecision, RefundAction, Ticket
+from northdesk_ticket_agent.main import create_app
 from northdesk_ticket_agent.orchestration.activities import TicketActivities
 from northdesk_ticket_agent.orchestration.errors import (
     NothingToApproveError,
@@ -148,3 +150,26 @@ async def test_nothing_to_approve_once_finished(
 
     with pytest.raises(NothingToApproveError):
         await temporal_workflows.approve(ticket.ticket_id, Approval(approved=True))
+
+
+async def test_the_api_end_to_end(
+    temporal_workflows: TemporalTicketWorkflows, example_tickets: dict[str, Ticket]
+) -> None:
+    ticket = fresh(example_tickets["T-2"])
+    app = create_app(temporal_workflows)
+
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://api") as api,
+    ):
+        started = await api.post("/tickets", json=ticket.model_dump())
+        await wait_for_step(temporal_workflows, ticket.ticket_id, Step.AWAITING_APPROVAL)
+        approved = await api.post(f"/tickets/{ticket.ticket_id}/approval", json={"approved": True})
+        await wait_for_step(temporal_workflows, ticket.ticket_id, Step.DONE)
+        status = await api.get(f"/tickets/{ticket.ticket_id}")
+
+    assert started.status_code == 202
+    assert approved.status_code == 200
+    assert status.status_code == 200
+    assert status.json()["step"] == "done"
+    assert status.json()["receipt"]["action"]["type"] == "refund"
