@@ -25,7 +25,7 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any, Literal, TextIO
 
-type LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
+type LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 # The workflow whose ID is the ticket ID (see orchestration/tickets.py). Its `@workflow.defn` takes the name from here,
 # so the two cannot drift apart, and this module still needs no Temporal import.
