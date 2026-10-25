@@ -11,6 +11,7 @@ to keep working when the AI or other downstream services fail temporarily.
 ```sh
 uv sync                                                   # install deps
 uv run fastapi dev src/northdesk_ticket_agent/main.py     # run with reload on :8000
+uv run northdesk-worker                                   # Temporal worker (needs a server at TEMPORAL_ADDRESS)
 uv run pytest                                             # all tests
 uv run pytest tests/unit                                  # unit tests only
 uv run pytest tests/integration                           # integration tests only
@@ -30,6 +31,7 @@ Settings come from environment variables (or a local `.env`); see `.env.example`
 - `LLM_MODE=fake` (default) uses a rule-based stand-in: no API key, no network, deterministic.
 - `LLM_MODE=openai` uses OpenAI tool calling and needs `OPENAI_API_KEY`.
 - `HELPDESK_FAILURE_RATE` (0 to 1, default 0.2) makes the fake Helpdesk fail at random with temporary errors, to exercise retries.
+- `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE` tell the worker where to find Temporal and which queue to poll.
 
 ## Tests
 

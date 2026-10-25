@@ -6,6 +6,7 @@ from temporalio.exceptions import ApplicationError
 from temporalio.testing import ActivityEnvironment
 
 from northdesk_ticket_agent.agent.agent import TicketAgent
+from northdesk_ticket_agent.config import Settings
 from northdesk_ticket_agent.domain.models import (
     ActionType,
     EscalateAction,
@@ -14,6 +15,7 @@ from northdesk_ticket_agent.domain.models import (
     Ticket,
 )
 from northdesk_ticket_agent.orchestration.activities import ActInput, CheckInput, TicketActivities
+from northdesk_ticket_agent.orchestration.worker import build_activities
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk
 from northdesk_ticket_agent.services.llm.base import (
@@ -229,3 +231,16 @@ async def test_act_a_different_refund_on_the_same_ticket_is_not_retried(
     assert error.type == "HelpdeskConflictError"
     assert error.non_retryable
     assert len(helpdesk.performed) == 1
+
+
+# worker wiring
+
+
+async def test_worker_builds_activities_from_settings(example_tickets: dict[str, Ticket]) -> None:
+    built = build_activities(Settings(_env_file=None, llm_mode="fake", helpdesk_failure_rate=0.0))
+
+    assert [fn.__name__ for fn in built.all()] == ["decide", "check", "act"]
+    receipt = await ActivityEnvironment().run(
+        built.act, ActInput(ticket_id="T-3", action=EscalateAction(reason="outage"))
+    )
+    assert receipt.reference.startswith("ES-")
