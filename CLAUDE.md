@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Backend service (FastAPI, Python 3.14, managed with `uv`) for Northdesk, a fictional software company whose support team receives tickets (password problems, billing questions, outages, spam). Each ticket is processed in several steps with the help of an AI agent, and the service must keep working when the AI or other downstream services fail temporarily — resilience to transient failures is a core design goal, not an afterthought.
+Backend service (FastAPI, Python 3.14, managed with `uv`) that triages support tickets for Northdesk, a fictional software company. An LLM agent looks up the customer, their invoices and the knowledge base through tool calls and proposes what to do; code checks the proposal, refunds wait for a person, and a Temporal workflow carries each ticket from decision to action. The LLM and the Helpdesk can both fail transiently, so retries, idempotent actions and escalation with a clear reason are part of the design, not add-ons.
 
 Built so far: the decision agent, the decision checks, the fake Helpdesk client, and the Temporal activities and worker. Docker Compose runs Temporal, the API and the worker. The ticket workflow and the ticket API endpoints are not built yet; `main.py` only has `/health`.
 

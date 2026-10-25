@@ -3,8 +3,8 @@ from fastapi import FastAPI
 app = FastAPI(
     title="Northdesk Ticket Agent",
     description=(
-        "Processes Northdesk support tickets in several steps with an AI agent, "
-        "and keeps working when the AI or other services fail temporarily."
+        "Triages Northdesk support tickets: an LLM agent proposes an action, code checks it, "
+        "and a Temporal workflow carries it out, retrying when a service fails for a short time."
     ),
 )
 

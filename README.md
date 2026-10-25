@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/AleksanderKol00/northdesk-agent-service/actions/workflows/ci.yml/badge.svg)](https://github.com/AleksanderKol00/northdesk-agent-service/actions/workflows/ci.yml)
 
-Backend service for Northdesk, a small (fictional) software company whose support team
-receives many tickets every day: password problems, billing questions, outages, and some spam.
-
-The service processes each ticket in several steps with the help of an AI agent, and is designed
-to keep working when the AI or other downstream services fail temporarily.
+A support-ticket triage service for Northdesk, a fictional software company. An LLM agent reads each
+ticket, looks up the customer, their invoices and the knowledge base through tool calls, and proposes
+a reply, a refund, an escalation or closing the ticket. Code checks every proposal, refunds wait for a
+person's approval, and a Temporal workflow takes the ticket from decision to action, retrying the LLM
+and the Helpdesk when they fail for a short time.
 
 ## Running with Docker
 
