@@ -4,17 +4,15 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
 
+from northdesk_ticket_agent.services.errors import ServiceError, TemporaryServiceError
 
-class LLMError(Exception):
+
+class LLMError(ServiceError):
     """Base class for failures of the LLM provider."""
 
-    retryable: bool = False
 
-
-class LLMTransientError(LLMError):
+class LLMTransientError(LLMError, TemporaryServiceError):
     """The call failed for a reason that may go away (timeout, rate limit, 5xx)."""
-
-    retryable = True
 
 
 class LLMPermanentError(LLMError):
