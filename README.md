@@ -50,7 +50,7 @@ Settings come from environment variables (or a local `.env`); see `.env.example`
 - `LLM_MODE=openai` uses OpenAI tool calling and needs `OPENAI_API_KEY`.
 - `HELPDESK_FAILURE_RATE` (0 to 1, default 0.2) makes the fake Helpdesk fail at random with temporary errors, to exercise retries.
 - `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE` tell the worker where to find Temporal and which queue to poll.
-- `LOG_LEVEL` (`DEBUG`, `INFO`, `WARNING` or `ERROR`; default `INFO`) for the API and the worker.
+- `LOG_LEVEL` (`DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`, in any case; `WARN` also works; default `INFO`) for the API and the worker.
 
 ## Logs
 
@@ -62,8 +62,9 @@ the Helpdesk or Temporal's own SDK, so one filter follows a ticket from request 
 docker compose logs --no-log-prefix api worker | jq -cR 'fromjson? | select(.ticket_id == "T-2")'
 ```
 
-Lines carry IDs, types and counts, never the ticket's text. The API logs one line per request (health checks only at
-`DEBUG`). Only the FastAPI CLI's banner and uvicorn's first two lines, written before the app starts, are plain text.
+Lines carry IDs, types and counts, never the ticket's text or anything the model wrote, which may repeat it. The API logs one line per request (health checks only at
+`DEBUG`). Temporal's own lines, including those from its Rust core (connection and poll errors), are JSON too. Only the
+FastAPI CLI's banner and uvicorn's first two lines, written before the app starts, are plain text.
 
 ## Known limitations
 
