@@ -33,4 +33,7 @@ class Settings(BaseSettings):
     @field_validator("log_level", mode="before")
     @classmethod
     def _level_in_any_case(cls, value: object) -> object:
-        return value.upper() if isinstance(value, str) else value
+        if not isinstance(value, str):
+            return value
+        level = value.strip().upper()
+        return "WARNING" if level == "WARN" else level  # WARN is the standard library's alias

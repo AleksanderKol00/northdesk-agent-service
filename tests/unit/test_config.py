@@ -46,8 +46,11 @@ def test_openai_mode_with_a_key_builds_the_openai_client() -> None:
     assert isinstance(client, OpenAIClient)
 
 
-def test_log_level_is_read_in_any_case() -> None:
-    assert settings(log_level="debug").log_level == "DEBUG"
+@pytest.mark.parametrize(
+    ("value", "level"), [("debug", "DEBUG"), (" Info ", "INFO"), ("warn", "WARNING"), ("critical", "CRITICAL")]
+)
+def test_log_level_is_read_in_any_case_and_with_the_usual_aliases(value: str, level: str) -> None:
+    assert settings(log_level=value).log_level == level
 
 
 def test_an_unknown_log_level_fails_at_startup() -> None:
