@@ -30,6 +30,7 @@ with workflow.unsafe.imports_passed_through():
         RefundAction,
         Ticket,
     )
+    from northdesk_ticket_agent.logs import TICKET_WORKFLOW_TYPE
     from northdesk_ticket_agent.orchestration.activities import ActInput, CheckInput
     from northdesk_ticket_agent.services.helpdesk import HelpdeskReceipt
 
@@ -88,7 +89,8 @@ class TicketState(BaseModel):
     error: str | None = None
 
 
-@workflow.defn(name="TicketWorkflow")
+# Named from logs.py, whose JSON lines add `ticket_id` to every line tagged with this workflow type.
+@workflow.defn(name=TICKET_WORKFLOW_TYPE)
 class TicketWorkflow:
     @workflow.init
     def __init__(self, ticket: Ticket) -> None:
