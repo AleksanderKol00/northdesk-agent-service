@@ -24,7 +24,14 @@ from northdesk_ticket_agent.domain.models import (
 )
 from northdesk_ticket_agent.domain.rules import check_decision
 from northdesk_ticket_agent.orchestration.activities import ActInput, CheckInput, TicketActivities
-from northdesk_ticket_agent.orchestration.workflow import Approval, Step, TicketState, TicketWorkflow
+from northdesk_ticket_agent.orchestration.workflow import (
+    ACT_RETRY,
+    DECIDE_RETRY,
+    Approval,
+    Step,
+    TicketState,
+    TicketWorkflow,
+)
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk, HelpdeskReceipt
 from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
@@ -225,7 +232,7 @@ async def test_failed_activity_succeeds_on_retry(
     [
         (permanent("UnknownCustomerError", "unknown customer C-999"), 1),
         (permanent("DecisionParseError", "no readable decision after 3 attempts"), 1),
-        (temporary("rate limited"), 3),  # never succeeds: the retry policy gives up after 3 attempts
+        (temporary("rate limited"), DECIDE_RETRY.maximum_attempts),  # never succeeds: the retry policy gives up
     ],
 )
 async def test_ticket_that_cannot_be_decided_is_escalated(
@@ -235,7 +242,7 @@ async def test_ticket_that_cannot_be_decided_is_escalated(
     error: ApplicationError,
     expected_attempts: int,
 ) -> None:
-    fakes = FakeActivities(datastore, REPLY, decide_errors=[error] * 3)
+    fakes = FakeActivities(datastore, REPLY, decide_errors=[error] * DECIDE_RETRY.maximum_attempts)
 
     async with running(workflow_env, fakes.all(), example_tickets["T-7"]) as handle:
         state = await handle.result()
@@ -251,7 +258,7 @@ async def test_ticket_that_cannot_be_decided_is_escalated(
 async def test_action_that_keeps_failing_fails_the_workflow(
     workflow_env: WorkflowEnvironment, datastore: DataStore, example_tickets: dict[str, Ticket]
 ) -> None:
-    fakes = FakeActivities(datastore, REPLY, act_errors=[temporary()] * 5)
+    fakes = FakeActivities(datastore, REPLY, act_errors=[temporary()] * ACT_RETRY.maximum_attempts)
 
     async with running(workflow_env, fakes.all(), example_tickets["T-1"]) as handle:
         with pytest.raises(WorkflowFailureError) as caught:
@@ -262,7 +269,7 @@ async def test_action_that_keeps_failing_fails_the_workflow(
         "Gave up on reply, which may have been carried out; check the Helpdesk before doing it again: "
         "HelpdeskTemporaryError: down for a moment"
     )
-    assert fakes.act_attempts == 5
+    assert fakes.act_attempts == ACT_RETRY.maximum_attempts
     assert state.step == Step.FAILED
     assert state.error == error
     assert isinstance(caught.value.cause, ApplicationError)

@@ -38,13 +38,20 @@ CHECK_TIMEOUT = timedelta(seconds=10)
 ACT_TIMEOUT = timedelta(seconds=30)
 
 # Errors a retry cannot fix are raised non-retryable by the activities, so these limits only cap temporary failures.
-DECIDE_RETRY = RetryPolicy(initial_interval=timedelta(seconds=1), backoff_coefficient=2.0, maximum_attempts=3)
+# They are long enough to ride out a short outage: about 1.5 min of backoff for the LLM, about 15 min for the Helpdesk.
+# Giving up on `decide` only costs an escalation; giving up on `act` fails the ticket, so it waits longer.
+DECIDE_RETRY = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=30),
+    maximum_attempts=8,
+)
 CHECK_RETRY = RetryPolicy(maximum_attempts=3)
 ACT_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=1),
     backoff_coefficient=2.0,
-    maximum_interval=timedelta(seconds=30),
-    maximum_attempts=5,
+    maximum_interval=timedelta(minutes=1),
+    maximum_attempts=20,
 )
 
 
