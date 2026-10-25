@@ -1,4 +1,7 @@
+import asyncio
+import os
 import random
+import signal
 from collections.abc import Awaitable, Callable
 
 import pytest
@@ -15,7 +18,7 @@ from northdesk_ticket_agent.domain.models import (
     Ticket,
 )
 from northdesk_ticket_agent.orchestration.activities import ActInput, CheckInput, TicketActivities
-from northdesk_ticket_agent.orchestration.worker import build_activities
+from northdesk_ticket_agent.orchestration.worker import STOP_SIGNALS, build_activities, stop_on_signals
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk
 from northdesk_ticket_agent.services.llm.base import (
@@ -244,3 +247,16 @@ async def test_worker_builds_activities_from_settings(example_tickets: dict[str,
         built.act, ActInput(ticket_id="T-3", action=EscalateAction(reason="outage"))
     )
     assert receipt.reference.startswith("ES-")
+
+
+@pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGINT])
+async def test_worker_stops_on_signal(sig: signal.Signals) -> None:
+    loop = asyncio.get_running_loop()
+    stop = stop_on_signals()
+    try:
+        assert not stop.is_set()
+        os.kill(os.getpid(), sig)
+        await asyncio.wait_for(stop.wait(), timeout=1)
+    finally:
+        for handled in STOP_SIGNALS:
+            loop.remove_signal_handler(handled)
