@@ -1,5 +1,7 @@
 # Northdesk Ticket Agent
 
+[![CI](https://github.com/AleksanderKol00/northdesk-agent-service/actions/workflows/ci.yml/badge.svg)](https://github.com/AleksanderKol00/northdesk-agent-service/actions/workflows/ci.yml)
+
 Backend service for Northdesk, a small (fictional) software company whose support team
 receives many tickets every day: password problems, billing questions, outages, and some spam.
 
@@ -7,6 +9,8 @@ The service processes each ticket in several steps with the help of an AI agent,
 to keep working when the AI or other downstream services fail temporarily.
 
 ## Development
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push: the pre-commit hooks plus a secret scan of the full history, and the tests with the 90% coverage threshold.
 
 ```sh
 uv sync                                                   # install deps

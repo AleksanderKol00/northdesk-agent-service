@@ -48,6 +48,7 @@ uv run lint-imports                                       # package boundaries
 uv run deptry src                                         # declared vs. imported deps
 uv run pre-commit install --install-hooks                 # once: git hooks
 uv run pre-commit run --all-files                         # all hooks by hand
+uv run pre-commit run --hook-stage manual --all-files     # secret scan of the whole git history
 ```
 
 The FastAPI entrypoint is configured in `pyproject.toml` as `northdesk_ticket_agent.main:app`.
@@ -58,10 +59,14 @@ import-linter (`[tool.importlinter]` in `pyproject.toml`) enforces the package b
 
 Pre-commit (`.pre-commit-config.yaml`): file hygiene, no commits on `main`, gitleaks (secrets), typos, `uv lock --check`, ruff, mypy, import-linter, deptry (every third-party import in `src/` must be a declared dependency) on commit; pytest with coverage on push (branch coverage, `fail_under = 90` in `[tool.coverage.report]`). Keep coverage up when adding code instead of lowering the threshold. Hooks run through `uv run`, so tool versions come from `uv.lock`.
 
+CI (`.github/workflows/ci.yml`): on every push, two parallel jobs. **Lint** runs `uv run pre-commit run --all-files` (skipping `no-commit-to-branch` and the staged-only `gitleaks` hook) and then the `gitleaks-history` hook; **Tests** runs `pytest --cov`. `.pre-commit-config.yaml` is the single list of checks: add a check there and CI picks it up.
+
+Secrets: the `gitleaks` hook scans staged changes on commit; the `gitleaks-history` hook (same tool, `stages: [pre-push, manual]`) scans the whole git history on push and in CI. `pre-commit run --all-files` alone does not scan for secrets; run `uv run pre-commit run --hook-stage manual --all-files` for a full scan.
+
 ## Git
 
 - Work on a separate branch per task, never directly on `main`. Branch from an up-to-date `main` and name it `<type>/<short-kebab-description>`, with type one of `feat`, `fix`, `refactor`, `test`, `docs`, `chore` (e.g. `feat/temporal-workflow`, `fix/refund-nan-check`).
-- Merge back into `main` through a pull request once tests and ruff pass, then delete the branch.
+- Merge into `main` only when the branch's CI run is green: all tests pass and branch coverage is at least 90% (`uv run pytest --cov`), along with ruff, mypy, lint-imports and deptry. Never merge a red or still-running branch, and never lower `fail_under` to get a merge through. Merge through a pull request, then delete the branch.
 - Review before commit: finish the code (tests and all checks passing), leave it uncommitted for the user to review, and commit only after the user has reviewed it and says to.
 - Make granular commits: one logical change per commit (e.g. dependencies/config, seed data, domain rules, a service adapter, the agent, docs), each with its own tests, not one big commit.
 - Each commit should leave the repo working: tests, ruff and mypy pass at every commit.
