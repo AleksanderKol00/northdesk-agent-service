@@ -33,6 +33,17 @@ Settings come from environment variables (or a local `.env`); see `.env.example`
 - `HELPDESK_FAILURE_RATE` (0 to 1, default 0.2) makes the fake Helpdesk fail at random with temporary errors, to exercise retries.
 - `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE` tell the worker where to find Temporal and which queue to poll.
 
+## Known limitations
+
+- **One worker with the fake Helpdesk.** Its idempotency keys live in the worker's memory. Temporal may send a retry
+  to another worker, and a restart forgets the keys, so with several workers a refund whose response was lost could be
+  issued twice. A real Helpdesk keeps the keys on its side, which removes this limit.
+- **One action of each type per ticket.** The Helpdesk idempotency key is `<ticket_id>:<action type>`, so processing a
+  ticket again cannot send a second, different reply (it fails as a conflict). This keeps a workflow reset from issuing a
+  refund twice; a ticket is processed once, as a repeated submission returns the existing workflow.
+- **The agent loop is one activity.** A temporary LLM error late in the loop retries `ticket.decide` from the first
+  step, repeating the earlier LLM calls. Running each LLM call as its own activity would retry only the failed call.
+
 ## Tests
 
 - `tests/unit/` — fast, isolated tests of single functions/classes; no I/O or app startup.
