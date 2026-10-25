@@ -4,19 +4,24 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from northdesk_ticket_agent.api import health, tickets
+from northdesk_ticket_agent.api.access_log import add_access_log
 from northdesk_ticket_agent.api.errors import add_error_handlers
 from northdesk_ticket_agent.config import Settings
+from northdesk_ticket_agent.logs import configure_logging
 from northdesk_ticket_agent.orchestration.client import connect
 from northdesk_ticket_agent.orchestration.tickets import TemporalTicketWorkflows, TicketWorkflows
 
 
 def create_app(workflows: TicketWorkflows | None = None) -> FastAPI:
-    """The API. Without `workflows`, it connects to Temporal on startup, using the settings from the environment."""
+    """The API. Without `workflows`, it sets up JSON logging and connects to Temporal on startup, using the settings
+    from the environment; with them (in tests), logging is left as it is."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if workflows is None:
             settings = Settings()
+            # Here rather than at import: uvicorn sets up its own logging first, and this replaces it.
+            configure_logging(settings.log_level)
             app.state.workflows = TemporalTicketWorkflows(await connect(settings), settings.temporal_task_queue)
         else:
             app.state.workflows = workflows
@@ -33,6 +38,7 @@ def create_app(workflows: TicketWorkflows | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(tickets.router)
     add_error_handlers(app)
+    add_access_log(app)
     return app
 
 

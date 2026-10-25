@@ -9,6 +9,7 @@ from northdesk_ticket_agent.domain.models import (
 )
 from northdesk_ticket_agent.orchestration.workflow import Approval, Step
 from tests.fixtures.client import StubTicketWorkflows
+from tests.fixtures.logs import LogLines
 
 REFUND = RefundAction(invoice_id="INV-1002", amount_eur=49.0)
 
@@ -151,3 +152,64 @@ def test_unavailable_temporal_is_503(
 
     assert [response.status_code for response in responses] == [503, 503, 503]
     assert responses[0].json() == {"detail": "tickets cannot be processed right now; try again later"}
+
+
+def test_every_request_about_a_ticket_logs_its_ids(
+    client: TestClient, workflows: StubTicketWorkflows, example_tickets: dict[str, Ticket], json_logs: LogLines
+) -> None:
+    client.post("/tickets", json=example_tickets["T-2"].model_dump())
+    await_refund_approval(workflows, "T-2")
+    client.post("/tickets/T-2/approval", json={"approved": True})
+    client.get("/tickets/T-2")
+
+    lines = [line for line in json_logs.all() if line["logger"].startswith("northdesk_ticket_agent.")]  # no httpx
+    assert lines, "nothing was logged"
+    assert all(line.get("ticket_id") == "T-2" and line.get("workflow_id") == "T-2" for line in lines)
+    access = json_logs.from_logger("northdesk_ticket_agent.api.access_log")
+    assert [(line["method"], line["path"], line["status_code"]) for line in access] == [
+        ("POST", "/tickets", 202),
+        ("POST", "/tickets/T-2/approval", 200),
+        ("GET", "/tickets/T-2", 200),
+    ]
+    assert [line["message"] for line in json_logs.from_logger("northdesk_ticket_agent.api.tickets")] == [
+        "Ticket accepted; workflow started",
+        "Refund approved",
+    ]
+
+
+def test_a_repeated_ticket_is_logged_as_such(
+    client: TestClient, example_tickets: dict[str, Ticket], json_logs: LogLines
+) -> None:
+    client.post("/tickets", json=example_tickets["T-1"].model_dump())
+    client.post("/tickets", json=example_tickets["T-1"].model_dump())
+
+    messages = [line["message"] for line in json_logs.from_logger("northdesk_ticket_agent.api.tickets")]
+    assert messages == ["Ticket accepted; workflow started", "Ticket was sent before; returning its workflow"]
+
+
+def test_an_error_answer_is_logged_with_the_ticket(client: TestClient, json_logs: LogLines) -> None:
+    client.get("/tickets/T-404")
+
+    [error] = json_logs.from_logger("northdesk_ticket_agent.api.errors")
+    assert error["level"] == "WARNING"
+    assert error["error"] == "TicketNotFoundError"
+    assert error["ticket_id"] == "T-404"
+    assert "exception" not in error  # a 4xx is the client's problem: no traceback
+
+
+def test_unavailable_temporal_is_logged_with_its_cause(
+    client: TestClient, workflows: StubTicketWorkflows, json_logs: LogLines
+) -> None:
+    workflows.down = True
+
+    client.get("/tickets/T-1")
+
+    [error] = json_logs.from_logger("northdesk_ticket_agent.api.errors")
+    assert error["error"] == "TicketWorkflowsUnavailableError"
+    assert "Traceback" in error["exception"]
+
+
+def test_health_checks_stay_out_of_the_info_log(client: TestClient, json_logs: LogLines) -> None:
+    client.get("/health")
+
+    assert json_logs.from_logger("northdesk_ticket_agent.api.access_log") == []
