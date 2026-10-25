@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field
 
 class Ticket(BaseModel):
     # Also the workflow ID and part of the API path and the Helpdesk idempotency key, so kept to URL-safe characters.
-    ticket_id: str = Field(pattern=r"^[A-Za-z0-9_.-]{1,64}$")
+    # It starts with a letter or digit, so it is never a dot segment ("." or ".."), which clients rewrite in a path.
+    ticket_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
     customer_id: str
     subject: str
     body: str
