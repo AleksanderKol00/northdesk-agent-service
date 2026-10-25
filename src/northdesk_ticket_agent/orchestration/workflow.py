@@ -9,6 +9,7 @@ the ticket into an escalation with the reason, so a person picks it up. If the a
 workflow fails with the reason; the state, readable through the `status` query, says where it stopped.
 """
 
+from contextlib import suppress
 from datetime import timedelta
 from enum import StrEnum
 
@@ -131,17 +132,10 @@ class TicketWorkflow:
     async def _wait_for_approval(self, state: TicketState, refund: RefundAction) -> Action:
         """Return the refund once a person approves it; an escalation if they reject it or don't answer in time."""
         state.step = Step.AWAITING_APPROVAL
-        what = f"refund of {refund.amount_eur:.2f} EUR on invoice {refund.invoice_id}"
-        try:
+        # An answer that arrives together with the timer was already accepted by the update, so it still counts.
+        with suppress(TimeoutError):
             await workflow.wait_condition(lambda: state.approval is not None, timeout=APPROVAL_TIMEOUT)
-        except TimeoutError:
-            return EscalateAction(reason=f"No approval within {_hours(APPROVAL_TIMEOUT)} h for the {what}")
-
-        approval = state.approval
-        if approval is not None and approval.approved:
-            return refund
-        comment = approval.comment if approval is not None else None
-        return EscalateAction(reason=f"The {what} was rejected" + (f": {comment}" if comment else ""))
+        return _approval_outcome(state.approval, refund)
 
     @workflow.query(name="status")
     def status(self) -> TicketState:
@@ -157,6 +151,16 @@ class TicketWorkflow:
     def _only_while_awaiting(self, approval: Approval) -> None:
         if self._state.step != Step.AWAITING_APPROVAL or self._state.approval is not None:
             raise ValueError("no refund is waiting for approval")
+
+
+def _approval_outcome(approval: Approval | None, refund: RefundAction) -> Action:
+    """The refund if a person approved it; otherwise an escalation saying it was rejected or not answered in time."""
+    if approval is not None and approval.approved:
+        return refund
+    what = f"refund of {refund.amount_eur:.2f} EUR on invoice {refund.invoice_id}"
+    if approval is None:
+        return EscalateAction(reason=f"No approval within {_hours(APPROVAL_TIMEOUT)} h for the {what}")
+    return EscalateAction(reason=f"The {what} was rejected" + (f": {approval.comment}" if approval.comment else ""))
 
 
 def _describe(err: ActivityError) -> str:
