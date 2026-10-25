@@ -46,6 +46,8 @@ Ruff: line length 100, rules `E, F, I, UP, B`. The FastAPI entrypoint is configu
 
 ## Git
 
+- Work on a separate branch per task, never directly on `main`. Branch from an up-to-date `main` and name it `<type>/<short-kebab-description>`, with type one of `feat`, `fix`, `refactor`, `test`, `docs`, `chore` (e.g. `feat/temporal-workflow`, `fix/refund-nan-check`).
+- Merge back into `main` through a pull request once tests and ruff pass, then delete the branch.
 - Make granular commits: one logical change per commit (e.g. dependencies/config, seed data, domain rules, a service adapter, the agent, docs), each with its own tests, not one big commit.
 - Each commit should leave the repo working: tests and ruff pass at every commit.
 
