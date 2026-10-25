@@ -7,13 +7,12 @@ import asyncio
 import signal
 from datetime import timedelta
 
-from temporalio.client import Client
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from northdesk_ticket_agent.agent.agent import TicketAgent
 from northdesk_ticket_agent.config import Settings
 from northdesk_ticket_agent.orchestration.activities import TicketActivities
+from northdesk_ticket_agent.orchestration.client import connect
 from northdesk_ticket_agent.orchestration.workflow import TicketWorkflow
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk
@@ -56,11 +55,7 @@ async def run_worker(settings: Settings) -> None:
     """Run the worker until SIGTERM or SIGINT, then shut it down gracefully."""
     stop = stop_on_signals()
     activities = build_activities(settings)
-    client = await Client.connect(
-        settings.temporal_address,
-        namespace=settings.temporal_namespace,
-        data_converter=pydantic_data_converter,
-    )
+    client = await connect(settings)
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue,
