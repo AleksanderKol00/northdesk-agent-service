@@ -1,7 +1,8 @@
 """What the API needs from Temporal: start a ticket's workflow, read its state, answer its refund approval.
 
 The workflow ID is the ticket ID, so a ticket sent twice finds the workflow already there instead of starting a second
-one; the ID is never reused, even after the first workflow has finished.
+one. The ID is not reused after the workflow has finished either, for as long as Temporal keeps the closed workflow
+(the namespace's retention period); after that, the same ticket ID would start a new workflow.
 """
 
 from dataclasses import dataclass

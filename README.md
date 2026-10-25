@@ -59,6 +59,16 @@ Settings come from environment variables (or a local `.env`); see `.env.example`
 - **One action of each type per ticket.** The Helpdesk idempotency key is `<ticket_id>:<action type>`, so processing a
   ticket again cannot send a second, different reply (it fails as a conflict). This keeps a workflow reset from issuing a
   refund twice; a ticket is processed once, as a repeated submission returns the existing workflow.
+- **Duplicates are caught only while Temporal remembers the ticket.** The workflow ID is the ticket ID and is not reused,
+  but Temporal deletes a closed workflow once the namespace's retention period has passed. After that, sending the same
+  ticket ID starts a new workflow, and `GET /tickets/{id}` for the old one returns 404. Keeping submitted ticket IDs in a
+  database of our own would make this permanent.
+- **A repeated ticket ID wins over its new content.** A second `POST /tickets` with an ID that was sent before returns
+  the existing workflow, even if the subject, body or customer differ; the new content is not processed or compared.
+- **A failed ticket is not retried by sending it again.** If the action fails for good, the workflow fails and a new
+  `POST` returns that failed workflow. This is on purpose: the failed action may have been carried out (a lost
+  response), so running the ticket again could refund twice. Once someone has checked the Helpdesk, the workflow can be
+  reset or restarted from the Temporal UI (:8233).
 - **The agent loop is one activity.** A temporary LLM error late in the loop retries `ticket.decide` from the first
   step, repeating the earlier LLM calls. Running each LLM call as its own activity would retry only the failed call.
 
