@@ -7,6 +7,9 @@ before anything acts on it, and a refund is never issued without a person's appr
 Anything that goes wrong before the action (an unknown customer, an unreadable answer, an LLM that stays down) turns
 the ticket into an escalation with the reason, so a person picks it up. If the action itself fails for good, the
 workflow fails with the reason; the state, readable through the `status` query, says where it stopped.
+
+It logs through `workflow.logger`, which stays quiet while a workflow is replayed, so each line is written once. The
+logger tags every line with the workflow, which the JSON logs turn into its `workflow_id` and `ticket_id`.
 """
 
 from contextlib import suppress
@@ -95,6 +98,7 @@ class TicketWorkflow:
     @workflow.run
     async def run(self, ticket: Ticket) -> TicketState:
         state = self._state
+        workflow.logger.info("Ticket workflow started")
 
         try:
             proposed = await workflow.execute_activity(
@@ -114,6 +118,7 @@ class TicketWorkflow:
             )
         except ActivityError as err:
             state.action = EscalateAction(reason=f"Could not decide automatically: {_describe(err)}")
+            workflow.logger.warning("Could not decide automatically; escalating", extra={"reason": _describe(err)})
         else:
             state.action = state.decision.action
             if isinstance(state.action, RefundAction):
@@ -131,18 +136,32 @@ class TicketWorkflow:
         except ActivityError as err:
             state.step = Step.FAILED
             state.error = _action_failure(state.action, err)
+            workflow.logger.error("Action failed for good: %s", state.error, extra={"action": state.action.type})
             raise ApplicationError(state.error, type="ActionFailed", non_retryable=True) from err
 
         state.step = Step.DONE
+        workflow.logger.info(
+            "Ticket done: %s",
+            state.action.type,
+            extra={"action": state.action.type, "reference": state.receipt.reference},
+        )
         return state
 
     async def _wait_for_approval(self, state: TicketState, refund: RefundAction) -> Action:
         """Return the refund once a person approves it; an escalation if they reject it or don't answer in time."""
         state.step = Step.AWAITING_APPROVAL
+        workflow.logger.info(
+            "Waiting for approval of a refund", extra={"invoice_id": refund.invoice_id, "amount_eur": refund.amount_eur}
+        )
         # An answer that arrives together with the timer was already accepted by the update, so it still counts.
         with suppress(TimeoutError):
             await workflow.wait_condition(lambda: state.approval is not None, timeout=APPROVAL_TIMEOUT)
-        return _approval_outcome(state.approval, refund)
+        outcome = _approval_outcome(state.approval, refund)
+        if isinstance(outcome, EscalateAction):
+            workflow.logger.info("Refund not approved; escalating", extra={"reason": outcome.reason})
+        else:
+            workflow.logger.info("Refund approved")
+        return outcome
 
     @workflow.query(name="status")
     def status(self) -> TicketState:

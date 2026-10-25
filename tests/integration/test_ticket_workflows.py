@@ -27,6 +27,7 @@ from northdesk_ticket_agent.orchestration.workflow import Approval, Step, Ticket
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk
 from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
+from tests.fixtures.logs import LogLines
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -220,3 +221,59 @@ async def test_the_api_end_to_end(
     assert status.status_code == 200
     assert status.json()["step"] == "done"
     assert status.json()["receipt"]["action"]["type"] == "refund"
+
+
+async def test_one_filter_follows_a_ticket_end_to_end(
+    temporal_workflows: TemporalTicketWorkflows, example_tickets: dict[str, Ticket], json_logs: LogLines
+) -> None:
+    ticket = fresh(example_tickets["T-2"])
+    app = create_app(temporal_workflows)
+
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://api") as api,
+    ):
+        await api.post("/tickets", json=ticket.model_dump())
+        await wait_for_step(temporal_workflows, ticket.ticket_id, Step.AWAITING_APPROVAL)
+        await api.post(f"/tickets/{ticket.ticket_id}/approval", json={"approved": True})
+        await wait_for_step(temporal_workflows, ticket.ticket_id, Step.DONE)
+
+    lines = json_logs.about(ticket.ticket_id)
+    assert {line["logger"] for line in lines} >= {
+        "northdesk_ticket_agent.api.access_log",
+        "northdesk_ticket_agent.api.tickets",
+        "temporalio.workflow",
+        "temporalio.activity",
+        "northdesk_ticket_agent.agent.agent",
+        "northdesk_ticket_agent.services.helpdesk",
+    }
+    assert all(line["workflow_id"] == ticket.ticket_id for line in lines)
+    # Nothing about this ticket is missed by the filter: every line naming its workflow names the ticket too.
+    assert [line for line in json_logs.all() if line.get("workflow_id") == ticket.ticket_id] == lines
+    workflow_lines = [line["message"] for line in json_logs.from_logger("temporalio.workflow") if line in lines]
+    assert workflow_lines == [
+        "Ticket workflow started",
+        "Waiting for approval of a refund",
+        "Refund approved",
+        "Ticket done: refund",
+    ]
+
+
+async def test_a_failed_activity_is_logged_with_the_ticket(
+    temporal_workflows: TemporalTicketWorkflows,
+    workflow_env: WorkflowEnvironment,
+    example_tickets: dict[str, Ticket],
+    json_logs: LogLines,
+) -> None:
+    ticket = fresh(example_tickets["T-7"])  # an unknown customer: deciding fails for good
+
+    await temporal_workflows.start(ticket)
+    await workflow_env.client.get_workflow_handle_for(TicketWorkflow.run, ticket.ticket_id).result()
+
+    lines = json_logs.about(ticket.ticket_id)
+    [failed] = [line for line in lines if line["message"] == "Completing activity as failed"]  # the SDK's own line
+    assert failed["temporal_activity"]["activity_type"] == "ticket.decide"
+    assert "UnknownCustomerError" in failed["exception"]
+    [escalated] = [line for line in lines if line["message"] == "Could not decide automatically; escalating"]
+    assert escalated["level"] == "WARNING"
+    assert escalated["reason"].startswith("UnknownCustomerError")
