@@ -40,16 +40,21 @@ uv run pytest tests/unit                                  # unit tests only
 uv run pytest tests/integration                           # integration tests only
 uv run pytest tests/unit/test_health.py::test_health_returns_ok   # single test
 uv run ruff check . && uv run ruff format .               # lint / format
+uv run mypy                                                # type check (strict)
+uv run pre-commit install --install-hooks                # once: git hooks
+uv run pre-commit run --all-files                        # all hooks by hand
 ```
 
-Ruff: line length 100, rules `E, F, I, UP, B`. The FastAPI entrypoint is configured in `pyproject.toml` as `northdesk_ticket_agent.main:app`.
+Ruff: line length 100; rules `E, F, I, UP, B` plus `S` (bandit), `BLE`, `ASYNC`, `SIM`, `C4`, `PIE`, `RET`, `RUF`, `PT`. Don't use `assert` for checks in `src/` (stripped under `-O`); use explicit guards. mypy runs in `strict` mode with the pydantic plugin over `src` and `tests`.
+
+Pre-commit (`.pre-commit-config.yaml`): file hygiene, `uv lock --check`, ruff, mypy on commit; pytest on push. Hooks run through `uv run`, so tool versions come from `uv.lock`. The FastAPI entrypoint is configured in `pyproject.toml` as `northdesk_ticket_agent.main:app`.
 
 ## Git
 
 - Work on a separate branch per task, never directly on `main`. Branch from an up-to-date `main` and name it `<type>/<short-kebab-description>`, with type one of `feat`, `fix`, `refactor`, `test`, `docs`, `chore` (e.g. `feat/temporal-workflow`, `fix/refund-nan-check`).
 - Merge back into `main` through a pull request once tests and ruff pass, then delete the branch.
 - Make granular commits: one logical change per commit (e.g. dependencies/config, seed data, domain rules, a service adapter, the agent, docs), each with its own tests, not one big commit.
-- Each commit should leave the repo working: tests and ruff pass at every commit.
+- Each commit should leave the repo working: tests, ruff and mypy pass at every commit.
 
 ## Layout and test conventions
 

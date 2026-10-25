@@ -15,6 +15,9 @@ uv run pytest                                             # all tests
 uv run pytest tests/unit                                  # unit tests only
 uv run pytest tests/integration                           # integration tests only
 uv run ruff check . && uv run ruff format .               # lint / format
+uv run mypy                                                # type check (strict)
+uv run pre-commit install --install-hooks                # once: git hooks
+uv run pre-commit run --all-files                        # all hooks by hand
 ```
 
 ## Configuration
