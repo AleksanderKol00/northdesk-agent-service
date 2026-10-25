@@ -29,6 +29,7 @@ Settings come from environment variables (or a local `.env`); see `.env.example`
 
 - `LLM_MODE=fake` (default) uses a rule-based stand-in: no API key, no network, deterministic.
 - `LLM_MODE=openai` uses OpenAI tool calling and needs `OPENAI_API_KEY`.
+- `HELPDESK_FAILURE_RATE` (0 to 1, default 0.2) makes the fake Helpdesk fail at random with temporary errors, to exercise retries.
 
 ## Tests
 
