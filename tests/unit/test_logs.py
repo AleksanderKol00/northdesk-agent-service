@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import sys
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -14,6 +15,7 @@ from northdesk_ticket_agent.logs import (
     configure_logging,
     log_context,
 )
+from northdesk_ticket_agent.orchestration.client import CORE_LOGGER, core_logging
 from northdesk_ticket_agent.orchestration.worker import configure_worker_logging
 
 logger = logging.getLogger("tests.logs")
@@ -111,6 +113,26 @@ def test_the_ticket_workflows_ids_are_lifted_from_temporal_details() -> None:
         assert line["workflow_id"] == "T-1"
         assert line["ticket_id"] == "T-1"
     assert from_activity["temporal_activity"]["attempt"] == 2
+
+
+def test_a_line_from_temporal_core_keeps_its_target_and_fields() -> None:
+    core = SimpleNamespace(target="temporalio_sdk_core::worker", fields={"workflow_id": "T-1", "attempt": 3})
+
+    line = formatted(record("Failing workflow task", temporal_log=core))
+
+    assert line["message"] == "Failing workflow task"
+    assert line["core_target"] == "temporalio_sdk_core::worker"
+    assert line["core_fields"] == {"workflow_id": "T-1", "attempt": 3}
+    assert line["workflow_id"] == "T-1"
+    assert "temporal_log" not in line
+
+
+def test_core_logs_are_forwarded_to_python_logging() -> None:
+    config = core_logging()
+
+    assert config.forwarding is not None
+    assert config.forwarding.logger.name == CORE_LOGGER
+    assert not config.forwarding.append_log_fields_to_message  # they become fields of the JSON line instead
 
 
 def test_another_workflow_gets_no_ticket_id() -> None:
