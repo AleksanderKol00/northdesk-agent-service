@@ -31,6 +31,9 @@ from northdesk_ticket_agent.orchestration.workflow import Approval, TicketState,
 # How long a call waits for Temporal, and for the worker when it has to answer (a query, an update).
 RPC_TIMEOUT = timedelta(seconds=10)
 
+# An update that times out may still have been accepted, so retrying it blindly could hit "already answered".
+ANSWER_MAY_BE_RECORDED = "the answer could not be confirmed and may have been recorded; read the ticket before retrying"
+
 
 @dataclass(frozen=True)
 class StartedTicket:
@@ -87,18 +90,22 @@ class TemporalTicketWorkflows:
         try:
             return await handle.execute_update(TicketWorkflow.approve, approval, rpc_timeout=self._rpc_timeout)
         except WorkflowUpdateFailedError as err:  # refused by the validator: the workflow is not waiting
-            raise NothingToApproveError(ticket_id) from err
+            raise await self._nothing_to_approve(ticket_id) from err
         except RPCTimeoutOrCancelledError as err:  # an update times out with its own error, not an RPCError
-            raise TicketWorkflowsUnavailableError from err
+            raise TicketWorkflowsUnavailableError(ANSWER_MAY_BE_RECORDED) from err
         except RPCError as err:
             if err.status != RPCStatusCode.NOT_FOUND:
                 raise _translate(err, ticket_id) from err
             # Either there is no such workflow, or it has finished and takes no more updates.
-            try:
-                await handle.describe(rpc_timeout=self._rpc_timeout)
-            except RPCError as describe_err:
-                raise _translate(describe_err, ticket_id) from err
-            raise NothingToApproveError(ticket_id) from err
+            raise await self._nothing_to_approve(ticket_id) from err
+
+    async def _nothing_to_approve(self, ticket_id: str) -> NothingToApproveError:
+        """The error for an approval that was refused, naming the earlier answer if there was one.
+
+        Reads the state to find it, so an unknown ticket raises `TicketNotFoundError` here instead.
+        """
+        state = await self.status(ticket_id)
+        return NothingToApproveError(ticket_id, state.approval.approved if state.approval else None)
 
     def _handle(self, ticket_id: str) -> WorkflowHandle[TicketWorkflow, TicketState]:
         return self._client.get_workflow_handle_for(TicketWorkflow.run, ticket_id)

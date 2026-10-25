@@ -161,7 +161,10 @@ class TicketWorkflow:
 
     @approve.validator
     def _only_while_awaiting(self, approval: Approval) -> None:
-        if self._state.step != Step.AWAITING_APPROVAL or self._state.approval is not None:
+        answered = self._state.approval
+        if answered is not None:
+            raise ValueError(f"the refund was already {'approved' if answered.approved else 'rejected'}")
+        if self._state.step != Step.AWAITING_APPROVAL:
             raise ValueError("no refund is waiting for approval")
 
 

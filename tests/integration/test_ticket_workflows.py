@@ -22,7 +22,7 @@ from northdesk_ticket_agent.orchestration.errors import (
     TicketNotFoundError,
     TicketWorkflowsUnavailableError,
 )
-from northdesk_ticket_agent.orchestration.tickets import StartedTicket, TemporalTicketWorkflows
+from northdesk_ticket_agent.orchestration.tickets import ANSWER_MAY_BE_RECORDED, StartedTicket, TemporalTicketWorkflows
 from northdesk_ticket_agent.orchestration.workflow import Approval, Step, TicketState, TicketWorkflow
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk
@@ -81,11 +81,14 @@ async def test_a_refund_is_approved_and_issued(
     waiting = await wait_for_step(temporal_workflows, ticket.ticket_id, Step.AWAITING_APPROVAL)
 
     answered = await temporal_workflows.approve(ticket.ticket_id, Approval(approved=True))
+    with pytest.raises(NothingToApproveError, match="already approved") as again:  # e.g. a retry after a timeout
+        await temporal_workflows.approve(ticket.ticket_id, Approval(approved=True))
     done = await wait_for_step(temporal_workflows, ticket.ticket_id, Step.DONE)
 
     assert isinstance(waiting.action, RefundAction)
     assert answered.approval == Approval(approved=True)
     assert answered.action == waiting.action
+    assert again.value.approved is True
     assert done.action == waiting.action
     assert [receipt.action for receipt in helpdesk.performed] == [waiting.action]
 
@@ -138,7 +141,7 @@ async def test_no_worker_answering_is_unavailable(
 
     with pytest.raises(TicketWorkflowsUnavailableError):
         await workflows.status(ticket.ticket_id)
-    with pytest.raises(TicketWorkflowsUnavailableError):
+    with pytest.raises(TicketWorkflowsUnavailableError, match=ANSWER_MAY_BE_RECORDED):
         await workflows.approve(ticket.ticket_id, Approval(approved=True))
 
 
@@ -177,7 +180,22 @@ async def test_nothing_to_approve_once_finished(
     await temporal_workflows.start(ticket)
     await wait_for_step(temporal_workflows, ticket.ticket_id, Step.DONE)
 
-    with pytest.raises(NothingToApproveError):
+    with pytest.raises(NothingToApproveError, match="no refund waiting") as refused:
+        await temporal_workflows.approve(ticket.ticket_id, Approval(approved=True))
+
+    assert refused.value.approved is None
+
+
+async def test_an_answered_refund_says_so_once_finished(
+    temporal_workflows: TemporalTicketWorkflows, example_tickets: dict[str, Ticket]
+) -> None:
+    ticket = fresh(example_tickets["T-2"])
+    await temporal_workflows.start(ticket)
+    await wait_for_step(temporal_workflows, ticket.ticket_id, Step.AWAITING_APPROVAL)
+    await temporal_workflows.approve(ticket.ticket_id, Approval(approved=False))
+    await wait_for_step(temporal_workflows, ticket.ticket_id, Step.DONE)
+
+    with pytest.raises(NothingToApproveError, match="already rejected"):
         await temporal_workflows.approve(ticket.ticket_id, Approval(approved=True))
 
 

@@ -45,7 +45,7 @@ class StubTicketWorkflows:
     async def approve(self, ticket_id: str, approval: Approval) -> TicketState:
         state = await self.status(ticket_id)
         if state.step != Step.AWAITING_APPROVAL or state.approval is not None:
-            raise NothingToApproveError(ticket_id)
+            raise NothingToApproveError(ticket_id, state.approval.approved if state.approval else None)
         state.approval = approval
         return state
 
