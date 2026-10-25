@@ -92,6 +92,4 @@ class TicketAgent:
 
     def _raise_if_out_of_attempts(self, failed_attempts: int, detail: str) -> None:
         if failed_attempts >= self._max_decision_attempts:
-            raise DecisionParseError(
-                f"no valid decision after {failed_attempts} attempts; last problem: {detail}"
-            )
+            raise DecisionParseError(f"no valid decision after {failed_attempts} attempts; last problem: {detail}")

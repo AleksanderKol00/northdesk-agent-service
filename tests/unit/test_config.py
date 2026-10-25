@@ -27,9 +27,7 @@ def test_openai_mode_without_a_key_fails_at_startup(key: str | None) -> None:
         build_llm_client(config)
 
 
-async def test_agent_uses_limits_from_settings(
-    datastore: DataStore, example_tickets: dict[str, Ticket]
-) -> None:
+async def test_agent_uses_limits_from_settings(datastore: DataStore, example_tickets: dict[str, Ticket]) -> None:
     # The fake needs two steps (lookups, then a decision), so a limit of one must stop it.
     agent = TicketAgent.from_settings(settings(agent_max_steps=1), datastore)
     with pytest.raises(AgentStepLimitError):

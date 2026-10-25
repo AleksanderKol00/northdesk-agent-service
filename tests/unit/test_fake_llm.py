@@ -12,9 +12,7 @@ from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
 
 async def decide_and_check(ticket: Ticket, datastore: DataStore) -> Decision:
     proposed = await TicketAgent(FakeLLMClient(), datastore).decide(ticket)
-    return check_decision(
-        proposed, ticket, datastore.get_invoices(ticket.customer_id), datastore.article_ids()
-    )
+    return check_decision(proposed, ticket, datastore.get_invoices(ticket.customer_id), datastore.article_ids())
 
 
 @pytest.mark.parametrize(
@@ -86,9 +84,7 @@ async def test_empty_ticket_does_not_crash(datastore: DataStore) -> None:
 
 
 async def test_keywords_match_whole_words_only(datastore: DataStore) -> None:
-    ticket = Ticket(
-        ticket_id="T-X", customer_id="C-300", subject="Report", body="The download is slow."
-    )
+    ticket = Ticket(ticket_id="T-X", customer_id="C-300", subject="Report", body="The download is slow.")
     decision = await decide_and_check(ticket, datastore)
     assert decision.category != "technical"
 

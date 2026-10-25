@@ -97,11 +97,7 @@ def _check_refund(
 
     # Ownership is checked against the ticket's customer, never a customer the model names.
     invoice = next(
-        (
-            inv
-            for inv in invoices
-            if inv.invoice_id == invoice_id and inv.customer_id == ticket.customer_id
-        ),
+        (inv for inv in invoices if inv.invoice_id == invoice_id and inv.customer_id == ticket.customer_id),
         None,
     )
     if invoice is None:
@@ -112,8 +108,7 @@ def _check_refund(
         return None
     if amount > invoice.amount_eur:
         violations.append(
-            f"refund {amount:.2f} EUR is larger than invoice "
-            f"{invoice.invoice_id} ({invoice.amount_eur:.2f} EUR)"
+            f"refund {amount:.2f} EUR is larger than invoice {invoice.invoice_id} ({invoice.amount_eur:.2f} EUR)"
         )
         return None
     return RefundAction(invoice_id=invoice.invoice_id, amount_eur=amount)

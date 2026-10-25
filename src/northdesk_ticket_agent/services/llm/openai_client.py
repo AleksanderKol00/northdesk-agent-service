@@ -26,9 +26,7 @@ class OpenAIClient:
     ) -> None:
         # The SDK's own retries are off: retries belong to the caller, so there is one
         # retry policy with one limit instead of two stacked ones.
-        self._client = client or openai.AsyncOpenAI(
-            api_key=api_key, timeout=timeout_s, max_retries=0
-        )
+        self._client = client or openai.AsyncOpenAI(api_key=api_key, timeout=timeout_s, max_retries=0)
         self._model = model
 
     async def complete(self, messages: list[Message], tools: list[ToolSpec]) -> LLMResponse:
@@ -37,9 +35,7 @@ class OpenAIClient:
                 model=self._model,
                 # The dicts follow the SDK's message shapes, but a role-dependent dict
                 # can't be narrowed to its TypedDict statically.
-                messages=cast(
-                    list[ChatCompletionMessageParam], [to_openai_message(m) for m in messages]
-                ),
+                messages=cast(list[ChatCompletionMessageParam], [to_openai_message(m) for m in messages]),
                 tools=[to_openai_tool(t) for t in tools],
                 tool_choice="required",
             )

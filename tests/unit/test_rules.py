@@ -15,15 +15,9 @@ from northdesk_ticket_agent.domain.rules import check_decision
 
 TICKET = Ticket(ticket_id="T-X", customer_id="C-100", subject="s", body="b")
 INVOICES = [
-    Invoice(
-        invoice_id="INV-1", customer_id="C-100", month="2026-09", amount_eur=49.0, status="paid"
-    ),
-    Invoice(
-        invoice_id="INV-9", customer_id="C-900", month="2026-09", amount_eur=990.0, status="paid"
-    ),
-    Invoice(
-        invoice_id="INV-4", customer_id="C-100", month="2026-08", amount_eur=49.0, status="overdue"
-    ),
+    Invoice(invoice_id="INV-1", customer_id="C-100", month="2026-09", amount_eur=49.0, status="paid"),
+    Invoice(invoice_id="INV-9", customer_id="C-900", month="2026-09", amount_eur=990.0, status="paid"),
+    Invoice(invoice_id="INV-4", customer_id="C-100", month="2026-08", amount_eur=49.0, status="overdue"),
 ]
 KB_IDS = {"KB-1", "KB-2"}
 
@@ -95,8 +89,7 @@ def test_escalation_falls_back_when_category_and_priority_are_invalid() -> None:
 
 def test_nan_refund_from_model_json_is_rejected() -> None:
     proposed = ProposedDecision.model_validate_json(
-        '{"category": "billing", "priority": "normal", "action": "refund",'
-        ' "invoice_id": "INV-1", "amount_eur": NaN}'
+        '{"category": "billing", "priority": "normal", "action": "refund", "invoice_id": "INV-1", "amount_eur": NaN}'
     )
     decision = check_decision(proposed, TICKET, INVOICES, KB_IDS)
     assert decision.action.type == ActionType.ESCALATE

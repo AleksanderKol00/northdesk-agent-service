@@ -51,9 +51,7 @@ class DataStore:
         """Rank articles by how many query words appear in their title and text."""
         query_words = _words(query)
         scored = []
-        for article, (title_words, text_words) in zip(
-            self._articles, self._article_words, strict=True
-        ):
+        for article, (title_words, text_words) in zip(self._articles, self._article_words, strict=True):
             title_hits = len(query_words & title_words)
             text_hits = len(query_words & text_words)
             score = 2 * title_hits + text_hits

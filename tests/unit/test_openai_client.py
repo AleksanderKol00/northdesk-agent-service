@@ -70,9 +70,7 @@ async def test_maps_tool_calls_and_sends_neutral_messages() -> None:
 
     response = await client.complete(messages, TOOLS)
 
-    assert response.tool_calls == [
-        ToolCall(id="call_1", name="search_kb", arguments='{"query": "x"}')
-    ]
+    assert response.tool_calls == [ToolCall(id="call_1", name="search_kb", arguments='{"query": "x"}')]
     sent = completions.kwargs
     assert sent["model"] == "test-model"
     assert sent["tool_choice"] == "required"

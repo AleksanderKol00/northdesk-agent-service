@@ -111,9 +111,7 @@ def _decide(text: str, results: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _reply(
-    category: str, priority: str, article: dict[str, Any], found: list[dict[str, Any]]
-) -> dict[str, Any]:
+def _reply(category: str, priority: str, article: dict[str, Any], found: list[dict[str, Any]]) -> dict[str, Any]:
     full = next((a for a in found if a["article_id"] == article["article_id"]), article)
     body = full.get("text", "Please see the linked article.")
     return {
@@ -159,11 +157,7 @@ def _as_list(value: Any) -> list[dict[str, Any]]:
 
 def _find_ticket(messages: list[Message]) -> dict[str, Any]:
     for message in messages:
-        if (
-            message.role == "user"
-            and message.content
-            and (match := _TICKET.search(message.content))
-        ):
+        if message.role == "user" and message.content and (match := _TICKET.search(message.content)):
             try:
                 ticket = json.loads(match.group(1))
             except json.JSONDecodeError:
