@@ -44,3 +44,12 @@ def test_helpdesk_failure_rate_must_be_between_zero_and_one(rate: float) -> None
 def test_openai_mode_with_a_key_builds_the_openai_client() -> None:
     client = build_llm_client(settings(llm_mode="openai", openai_api_key="sk-test"))
     assert isinstance(client, OpenAIClient)
+
+
+def test_log_level_is_read_in_any_case() -> None:
+    assert settings(log_level="debug").log_level == "DEBUG"
+
+
+def test_an_unknown_log_level_fails_at_startup() -> None:
+    with pytest.raises(ValueError, match="log_level"):
+        settings(log_level="loud")
