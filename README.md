@@ -17,6 +17,13 @@ uv run pytest tests/integration                           # integration tests on
 uv run ruff check . && uv run ruff format .               # lint / format
 ```
 
+## Configuration
+
+Settings come from environment variables (or a local `.env`); see `.env.example`.
+
+- `LLM_MODE=fake` (default) uses a rule-based stand-in: no API key, no network, deterministic.
+- `LLM_MODE=openai` uses OpenAI tool calling and needs `OPENAI_API_KEY`.
+
 ## Tests
 
 - `tests/unit/` — fast, isolated tests of single functions/classes; no I/O or app startup.
