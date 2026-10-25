@@ -6,7 +6,8 @@ marked retryable or not. Temporal then retries only what a retry can fix, and th
 under the workflow's retry policy, which caps the number of attempts.
 
 Each activity runs in a `log_context` with the ticket's IDs, so every line logged meanwhile carries them, including the
-agent's and the Helpdesk's. A failed attempt is logged by the SDK itself ("Completing activity as failed").
+agent's and the Helpdesk's. A failed attempt is logged by the SDK itself ("Completing activity as failed"). Lines name
+types and counts, never what the model wrote: before `check`, any of it may echo the ticket.
 """
 
 from collections.abc import Callable
@@ -57,7 +58,8 @@ class TicketActivities:
                 # An AgentError (unknown customer, unreadable decision, step limit) is never temporary: asking the
                 # model again won't change the outcome.
                 raise _application_error(exc) from exc
-            activity.logger.info("Agent proposed %s", proposed.action, extra={"proposed_action": proposed.action})
+            # Not the proposed action: it is an unchecked string from the model. `check` logs the checked one.
+            activity.logger.info("Agent proposed a decision")
             return proposed
 
     @activity.defn(name="ticket.check")
@@ -72,10 +74,11 @@ class TicketActivities:
             )
             fields = {"action": decision.action.type, "category": decision.category, "priority": decision.priority}
             if decision.violations:
+                # The count only: the violations quote the model's values, which may repeat the ticket's text.
                 activity.logger.warning(
                     "Decision broke %d rule(s); escalating",
                     len(decision.violations),
-                    extra={**fields, "violations": decision.violations},
+                    extra={**fields, "violations": len(decision.violations)},
                 )
             else:
                 activity.logger.info("Decision passed the checks: %s", decision.action.type, extra=fields)
