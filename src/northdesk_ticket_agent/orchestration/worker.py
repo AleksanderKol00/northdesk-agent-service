@@ -1,4 +1,4 @@
-"""The Temporal worker process: polls the task queue and runs the ticket activities.
+"""The Temporal worker process: polls the task queue and runs the ticket workflow and its activities.
 
 Start it with `uv run northdesk-worker` (needs a Temporal server at `TEMPORAL_ADDRESS`).
 """
@@ -14,6 +14,7 @@ from temporalio.worker import Worker
 from northdesk_ticket_agent.agent.agent import TicketAgent
 from northdesk_ticket_agent.config import Settings
 from northdesk_ticket_agent.orchestration.activities import TicketActivities
+from northdesk_ticket_agent.orchestration.workflow import TicketWorkflow
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk
 
@@ -63,6 +64,7 @@ async def run_worker(settings: Settings) -> None:
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue,
+        workflows=[TicketWorkflow],
         activities=activities.all(),
         graceful_shutdown_timeout=GRACEFUL_SHUTDOWN,
     )
