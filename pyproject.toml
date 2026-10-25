@@ -27,6 +27,7 @@ dev = [
     "pre-commit>=4.7.0",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.17.2",
 ]
 
@@ -61,6 +62,16 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = ["--import-mode=importlib"]
 asyncio_mode = "auto"
+
+# Measured with `uv run pytest --cov`; the pre-push hook fails below the threshold.
+[tool.coverage.run]
+source = ["northdesk_ticket_agent"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
 
 [tool.mypy]
 python_version = "3.14"

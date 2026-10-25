@@ -83,8 +83,8 @@ repos:
         require_serial: true
 
       - id: pytest
-        name: pytest
-        entry: uv run pytest -q
+        name: pytest with coverage threshold
+        entry: uv run pytest -q --cov
         language: system
         pass_filenames: false
         always_run: true
