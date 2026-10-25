@@ -1,4 +1,5 @@
 import json
+import logging
 
 from pydantic import ValidationError
 
@@ -19,6 +20,8 @@ from northdesk_ticket_agent.domain.models import ProposedDecision, Ticket
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.llm.base import LLMClient, Message
 from northdesk_ticket_agent.services.llm.factory import build_llm_client
+
+logger = logging.getLogger(__name__)
 
 _NO_DECISION_REMINDER = f"Reply only with tool calls. Call {SUBMIT_DECISION} to finish."
 
@@ -63,6 +66,7 @@ class TicketAgent:
             messages.append(response.as_message())
 
             if not response.tool_calls:
+                logger.warning("Model answered without a tool call; reminding it")
                 failed_attempts += 1
                 self._raise_if_out_of_attempts(failed_attempts, "model answered without a tool")
                 messages.append(Message(role="user", content=_NO_DECISION_REMINDER))
@@ -71,6 +75,8 @@ class TicketAgent:
             decision: ProposedDecision | None = None
             for call in response.tool_calls:
                 if call.name != SUBMIT_DECISION:
+                    # The name only: arguments are the model's, and may repeat the ticket's text.
+                    logger.info("Tool call: %s", call.name, extra={"tool": call.name})
                     result = tools.run(call.name, call.arguments)
                 elif decision is not None:
                     result = json.dumps({"error": "only one decision is allowed"})
@@ -79,6 +85,10 @@ class TicketAgent:
                         decision = ProposedDecision.model_validate_json(call.arguments)
                         result = json.dumps({"status": "received"})
                     except ValidationError as exc:
+                        logger.warning(
+                            "Unreadable decision; asking the model again",
+                            extra={"errors": exc.error_count(), "attempt": failed_attempts + 1},
+                        )
                         failed_attempts += 1
                         self._raise_if_out_of_attempts(failed_attempts, str(exc))
                         result = format_validation_error(exc)

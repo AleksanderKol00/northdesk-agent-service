@@ -5,6 +5,7 @@ import sys
 from typing import Any
 
 import pytest
+from temporalio import activity, workflow
 
 from northdesk_ticket_agent.logs import (
     UVICORN_ACCESS_LOGGER,
@@ -13,6 +14,7 @@ from northdesk_ticket_agent.logs import (
     configure_logging,
     log_context,
 )
+from northdesk_ticket_agent.orchestration.worker import configure_worker_logging
 
 logger = logging.getLogger("tests.logs")
 
@@ -131,3 +133,11 @@ def test_configure_logging_sends_every_logger_through_one_json_handler() -> None
     lines = [json.loads(line) for line in stream.getvalue().splitlines()]
     assert [(line["logger"], line["message"]) for line in lines] == [("uvicorn.error", "from uvicorn")]
     assert logging.getLogger("uvicorn").handlers == []
+
+
+@pytest.mark.usefixtures("restore_logging")
+def test_the_worker_keeps_temporal_details_out_of_the_message() -> None:
+    configure_worker_logging("INFO")
+
+    assert activity.logger.activity_info_on_message is False
+    assert workflow.logger.workflow_info_on_message is False

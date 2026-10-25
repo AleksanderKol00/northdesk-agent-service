@@ -7,12 +7,15 @@ Every call takes an idempotency key. Repeating a call with the same key returns 
 action again, so a retried refund is issued once. State lives in memory, so the guarantee holds within one process.
 """
 
+import logging
 import random
 
 from pydantic import BaseModel, ConfigDict
 
 from northdesk_ticket_agent.domain.models import Action, ActionType
 from northdesk_ticket_agent.services.errors import ServiceError, TemporaryServiceError
+
+logger = logging.getLogger(__name__)
 
 _REFERENCE_PREFIX = {
     ActionType.REPLY: "RE",
@@ -65,10 +68,24 @@ class FakeHelpdesk:
         fails = self._rng.random() < self._failure_rate
         response_lost = fails and self._rng.random() < 0.5
         if fails and not response_lost:
+            logger.warning("Simulated failure before acting", extra={"idempotency_key": idempotency_key})
             raise HelpdeskTemporaryError("Helpdesk is temporarily unavailable")
 
-        receipt = earlier if earlier is not None else self._record(ticket_id, action, idempotency_key)
+        if earlier is not None:
+            receipt = earlier
+            logger.info(
+                "Repeated request; returning the first receipt",
+                extra={"idempotency_key": idempotency_key, "reference": receipt.reference},
+            )
+        else:
+            receipt = self._record(ticket_id, action, idempotency_key)
+            logger.info(
+                "Carried out %s",
+                action.type,
+                extra={"idempotency_key": idempotency_key, "reference": receipt.reference},
+            )
         if response_lost:
+            logger.warning("Simulated failure after acting: response lost", extra={"idempotency_key": idempotency_key})
             raise HelpdeskTemporaryError("Helpdesk response was lost")
         # Callers get copies, so changing a receipt or its action cannot change what is stored.
         return receipt.model_copy(deep=True)

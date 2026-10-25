@@ -4,13 +4,16 @@ Start it with `uv run northdesk-worker` (needs a Temporal server at `TEMPORAL_AD
 """
 
 import asyncio
+import logging
 import signal
 from datetime import timedelta
 
+from temporalio import activity, workflow
 from temporalio.worker import Worker
 
 from northdesk_ticket_agent.agent.agent import TicketAgent
 from northdesk_ticket_agent.config import Settings
+from northdesk_ticket_agent.logs import LogLevel, configure_logging
 from northdesk_ticket_agent.orchestration.activities import TicketActivities
 from northdesk_ticket_agent.orchestration.client import connect
 from northdesk_ticket_agent.orchestration.workflow import TicketWorkflow
@@ -21,6 +24,8 @@ from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk
 # stop timeout, so a `docker compose stop` ends in a clean shutdown and not a kill.
 GRACEFUL_SHUTDOWN = timedelta(seconds=8)
 STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT)
+
+logger = logging.getLogger(__name__)
 
 
 def build_activities(settings: Settings) -> TicketActivities:
@@ -51,6 +56,14 @@ def stop_on_signals() -> asyncio.Event:
     return stop
 
 
+def configure_worker_logging(level: LogLevel) -> None:
+    """JSON logs, as in the API. Temporal's details become fields of the line, so they are not appended to the
+    message as well (the SDK's default)."""
+    configure_logging(level)
+    activity.logger.activity_info_on_message = False
+    workflow.logger.workflow_info_on_message = False
+
+
 async def run_worker(settings: Settings) -> None:
     """Run the worker until SIGTERM or SIGINT, then shut it down gracefully."""
     stop = stop_on_signals()
@@ -64,8 +77,12 @@ async def run_worker(settings: Settings) -> None:
         graceful_shutdown_timeout=GRACEFUL_SHUTDOWN,
     )
     async with worker:
+        logger.info("Worker started", extra={"task_queue": settings.temporal_task_queue})
         await stop.wait()
+        logger.info("Stopping the worker")
 
 
 def main() -> None:
-    asyncio.run(run_worker(Settings()))
+    settings = Settings()
+    configure_worker_logging(settings.log_level)
+    asyncio.run(run_worker(settings))
