@@ -41,13 +41,16 @@ uv run pytest tests/integration                           # integration tests on
 uv run pytest tests/unit/test_health.py::test_health_returns_ok   # single test
 uv run ruff check . && uv run ruff format .               # lint / format
 uv run mypy                                                # type check (strict)
+uv run lint-imports                                       # package boundaries
 uv run pre-commit install --install-hooks                # once: git hooks
 uv run pre-commit run --all-files                        # all hooks by hand
 ```
 
-Ruff: line length 100; rules `E, F, I, UP, B` plus `S` (bandit), `BLE`, `ASYNC`, `SIM`, `C4`, `PIE`, `RET`, `RUF`, `PT`. Don't use `assert` for checks in `src/` (stripped under `-O`); use explicit guards. mypy runs in `strict` mode with the pydantic plugin over `src` and `tests`.
+Ruff: line length 100; rules `E, F, I, UP, B` plus `S` (bandit), `BLE`, `ASYNC`, `SIM`, `C4`, `PIE`, `RET`, `RUF`, `PT`, `TID` (relative imports are banned; import sorting is `I`, formatting is `ruff format`). Don't use `assert` for checks in `src/` (stripped under `-O`); use explicit guards. mypy runs in `strict` mode with the pydantic plugin over `src` and `tests`.
 
-Pre-commit (`.pre-commit-config.yaml`): file hygiene, `uv lock --check`, ruff, mypy on commit; pytest on push. Hooks run through `uv run`, so tool versions come from `uv.lock`. The FastAPI entrypoint is configured in `pyproject.toml` as `northdesk_ticket_agent.main:app`.
+import-linter (`[tool.importlinter]` in `pyproject.toml`) enforces the package boundaries above: layers `main → agent → services → domain`, `domain` imports no FastAPI/OpenAI/config, and only `services/llm/openai_client.py` imports `openai` directly.
+
+Pre-commit (`.pre-commit-config.yaml`): file hygiene, `uv lock --check`, ruff, mypy, import-linter on commit; pytest on push. Hooks run through `uv run`, so tool versions come from `uv.lock`. The FastAPI entrypoint is configured in `pyproject.toml` as `northdesk_ticket_agent.main:app`.
 
 ## Git
 

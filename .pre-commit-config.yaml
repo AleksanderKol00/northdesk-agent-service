@@ -50,6 +50,15 @@ repos:
         pass_filenames: false
         require_serial: true
 
+      - id: import-linter
+        name: import contracts
+        entry: uv run lint-imports
+        language: system
+        types: [python]
+        files: ^src/
+        pass_filenames: false
+        require_serial: true
+
       - id: pytest
         name: pytest
         entry: uv run pytest -q
