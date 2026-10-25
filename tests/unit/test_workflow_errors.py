@@ -1,8 +1,8 @@
 import pytest
 from temporalio.exceptions import ActivityError, ApplicationError, TimeoutError, TimeoutType
 
-from northdesk_ticket_agent.domain.models import EscalateAction, RefundAction
-from northdesk_ticket_agent.orchestration.workflow import Approval, _approval_outcome, _describe
+from northdesk_ticket_agent.domain.models import EscalateAction, RefundAction, ReplyAction
+from northdesk_ticket_agent.orchestration.workflow import Approval, _action_failure, _approval_outcome, _describe
 
 
 def activity_error(cause: BaseException | None) -> ActivityError:
@@ -58,3 +58,27 @@ REFUND = RefundAction(invoice_id="INV-1002", amount_eur=49.0)
 )
 def test_approval_outcome(approval: Approval | None, expected: object) -> None:
     assert _approval_outcome(approval, REFUND) == expected
+
+
+@pytest.mark.parametrize(
+    ("cause", "expected"),
+    [
+        (
+            ApplicationError("key was used for a different request", type="HelpdeskConflictError", non_retryable=True),
+            "Could not carry out reply: HelpdeskConflictError: key was used for a different request",
+        ),
+        (
+            ApplicationError("response was lost", type="HelpdeskTemporaryError"),
+            "Gave up on reply, which may have been carried out; check the Helpdesk before doing it again: "
+            "HelpdeskTemporaryError: response was lost",
+        ),
+        (
+            TimeoutError("activity StartToClose timeout", type=TimeoutType.START_TO_CLOSE, last_heartbeat_details=[]),
+            "Gave up on reply, which may have been carried out; check the Helpdesk before doing it again: "
+            "activity StartToClose timeout",
+        ),
+    ],
+)
+def test_action_failure_says_whether_the_action_may_have_happened(cause: BaseException, expected: str) -> None:
+    action = ReplyAction(message="See KB-1.", article_ids=["KB-1"])
+    assert _action_failure(action, activity_error(cause)) == expected

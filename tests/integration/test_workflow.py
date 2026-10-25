@@ -258,7 +258,10 @@ async def test_action_that_keeps_failing_fails_the_workflow(
             await handle.result()
         state = await handle.query(TicketWorkflow.status)
 
-    error = "Could not carry out reply: HelpdeskTemporaryError: down for a moment"
+    error = (
+        "Gave up on reply, which may have been carried out; check the Helpdesk before doing it again: "
+        "HelpdeskTemporaryError: down for a moment"
+    )
     assert fakes.act_attempts == 5
     assert state.step == Step.FAILED
     assert state.error == error
