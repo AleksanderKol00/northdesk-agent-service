@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from northdesk_ticket_agent.domain.models import (
@@ -213,3 +214,30 @@ def test_health_checks_stay_out_of_the_info_log(client: TestClient, json_logs: L
     client.get("/health")
 
     assert json_logs.from_logger("northdesk_ticket_agent.api.access_log") == []
+
+
+def test_a_refused_approval_body_is_logged_with_the_ticket(client: TestClient, json_logs: LogLines) -> None:
+    client.post("/tickets/T-2/approval", json={"comment": "yes?"})  # no answer: 422
+
+    [access] = json_logs.from_logger("northdesk_ticket_agent.api.access_log")
+    assert access["status_code"] == 422
+    assert access["ticket_id"] == access["workflow_id"] == "T-2"
+
+
+def test_an_unhandled_error_is_logged_with_the_ticket_and_answered_with_500(
+    client: TestClient, workflows: StubTicketWorkflows, json_logs: LogLines, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def crash(ticket_id: str) -> None:
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(workflows, "status", crash)
+
+    response = client.get("/tickets/T-1")
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal Server Error"}
+    [error, access] = json_logs.from_logger("northdesk_ticket_agent.api.access_log")
+    assert error["message"] == "Unhandled error"
+    assert "RuntimeError: bug" in error["exception"]
+    assert error["ticket_id"] == access["ticket_id"] == "T-1"
+    assert access["status_code"] == 500
