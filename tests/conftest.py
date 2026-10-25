@@ -3,4 +3,5 @@ pytest_plugins = [
     "tests.fixtures.data",
     "tests.fixtures.helpdesk",
     "tests.fixtures.llm",
+    "tests.fixtures.temporal",
 ]
