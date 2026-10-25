@@ -17,6 +17,10 @@ class Settings(BaseSettings):
 
     helpdesk_failure_rate: float = Field(default=0.2, ge=0.0, le=1.0)
 
+    temporal_address: str = "localhost:7233"
+    temporal_namespace: str = "default"
+    temporal_task_queue: str = "tickets"
+
     @field_validator("openai_api_key", mode="before")
     @classmethod
     def _blank_key_is_missing(cls, value: object) -> object:
