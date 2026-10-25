@@ -27,8 +27,8 @@ from typing import Any, Literal, TextIO
 
 type LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
-# The workflow whose ID is the ticket ID (see orchestration/tickets.py). Kept as a name, so this module needs no
-# Temporal import.
+# The workflow whose ID is the ticket ID (see orchestration/tickets.py). Its `@workflow.defn` takes the name from here,
+# so the two cannot drift apart, and this module still needs no Temporal import.
 TICKET_WORKFLOW_TYPE = "TicketWorkflow"
 TEMPORAL_DETAILS = ("temporal_workflow", "temporal_activity")
 
