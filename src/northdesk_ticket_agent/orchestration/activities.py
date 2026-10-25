@@ -91,16 +91,12 @@ class TicketActivities:
         # Helpdesk keeps keys in memory, so this holds only while one worker process handles every retry (see README).
         idempotency_key = f"{request.ticket_id}:{request.action.type}"
         with _ticket_log_context(request.ticket_id):
+            # The Helpdesk logs whether it acted or returned the first receipt for a repeated key; the workflow logs
+            # the outcome. A line here would claim the action was carried out again on every retry.
             try:
-                receipt = await self._helpdesk.perform(request.ticket_id, request.action, idempotency_key)
+                return await self._helpdesk.perform(request.ticket_id, request.action, idempotency_key)
             except ServiceError as exc:
                 raise _application_error(exc) from exc
-            activity.logger.info(
-                "Helpdesk carried out %s",
-                request.action.type,
-                extra={"action": request.action.type, "reference": receipt.reference},
-            )
-            return receipt
 
 
 def _ticket_log_context(ticket_id: str) -> AbstractContextManager[None]:
