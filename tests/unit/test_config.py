@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from northdesk_ticket_agent.agent.agent import TicketAgent
@@ -9,7 +11,7 @@ from northdesk_ticket_agent.services.llm.factory import build_llm_client
 from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
 
 
-def settings(**values) -> Settings:
+def settings(**values: Any) -> Settings:
     return Settings(_env_file=None, **values)
 
 

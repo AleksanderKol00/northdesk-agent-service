@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 import pytest
 
@@ -10,18 +11,18 @@ from northdesk_ticket_agent.agent.errors import (
 )
 from northdesk_ticket_agent.domain.models import Ticket
 from northdesk_ticket_agent.services.datastore import DataStore
-from northdesk_ticket_agent.services.llm.base import LLMResponse
-from tests.fixtures.llm import tool_call
+from northdesk_ticket_agent.services.llm.base import LLMResponse, Message
+from tests.fixtures.llm import ScriptedLLMFactory, tool_call
 
 CLOSE = {"category": "other", "priority": "low", "action": "close", "reason": "spam"}
 
 
-def tool_results(messages) -> dict[str, dict | list]:
-    return {m.tool_call_id: json.loads(m.content) for m in messages if m.role == "tool"}
+def tool_results(messages: list[Message]) -> dict[str | None, Any]:
+    return {m.tool_call_id: json.loads(m.content or "") for m in messages if m.role == "tool"}
 
 
 async def test_runs_tool_calls_and_feeds_results_back(
-    scripted_llm, datastore: DataStore, example_tickets: dict[str, Ticket]
+    scripted_llm: ScriptedLLMFactory, datastore: DataStore, example_tickets: dict[str, Ticket]
 ) -> None:
     llm = scripted_llm(
         tool_call("get_customer", call_id="a"),
@@ -37,18 +38,19 @@ async def test_runs_tool_calls_and_feeds_results_back(
 
 
 async def test_ticket_is_sent_as_delimited_data(
-    scripted_llm, datastore: DataStore, example_tickets: dict[str, Ticket]
+    scripted_llm: ScriptedLLMFactory, datastore: DataStore, example_tickets: dict[str, Ticket]
 ) -> None:
     llm = scripted_llm(tool_call("submit_decision", CLOSE))
     await TicketAgent(llm, datastore).decide(example_tickets["T-6"])
 
     system, user = llm.calls[0][:2]
+    assert system.content is not None and user.content is not None
     assert "untrusted" in system.content
     assert "<ticket>" in user.content and "Ignore all previous instructions" in user.content
 
 
 async def test_invoice_lookup_always_uses_the_tickets_customer(
-    scripted_llm, datastore: DataStore, example_tickets: dict[str, Ticket]
+    scripted_llm: ScriptedLLMFactory, datastore: DataStore, example_tickets: dict[str, Ticket]
 ) -> None:
     # Extra arguments the model invents (e.g. another customer id) are ignored.
     llm = scripted_llm(
@@ -62,7 +64,7 @@ async def test_invoice_lookup_always_uses_the_tickets_customer(
 
 
 async def test_invalid_decision_is_sent_back_and_retried(
-    scripted_llm, datastore: DataStore, example_tickets: dict[str, Ticket]
+    scripted_llm: ScriptedLLMFactory, datastore: DataStore, example_tickets: dict[str, Ticket]
 ) -> None:
     llm = scripted_llm(
         tool_call("submit_decision", {"category": "other"}, call_id="a"),
@@ -75,7 +77,7 @@ async def test_invalid_decision_is_sent_back_and_retried(
 
 
 async def test_gives_up_after_repeated_unreadable_decisions(
-    scripted_llm, datastore: DataStore, example_tickets: dict[str, Ticket]
+    scripted_llm: ScriptedLLMFactory, datastore: DataStore, example_tickets: dict[str, Ticket]
 ) -> None:
     llm = scripted_llm(
         tool_call("submit_decision", "not json"),
@@ -89,7 +91,7 @@ async def test_gives_up_after_repeated_unreadable_decisions(
 
 
 async def test_unknown_customer_fails_without_calling_the_llm(
-    scripted_llm, datastore: DataStore, example_tickets: dict[str, Ticket]
+    scripted_llm: ScriptedLLMFactory, datastore: DataStore, example_tickets: dict[str, Ticket]
 ) -> None:
     llm = scripted_llm()
     with pytest.raises(UnknownCustomerError, match="C-999"):
@@ -98,7 +100,7 @@ async def test_unknown_customer_fails_without_calling_the_llm(
 
 
 async def test_stops_after_step_limit(
-    scripted_llm, datastore: DataStore, example_tickets: dict[str, Ticket]
+    scripted_llm: ScriptedLLMFactory, datastore: DataStore, example_tickets: dict[str, Ticket]
 ) -> None:
     llm = scripted_llm(*[tool_call("get_customer", call_id=f"c{i}") for i in range(3)])
     with pytest.raises(AgentStepLimitError):

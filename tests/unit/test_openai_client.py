@@ -1,7 +1,7 @@
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
-import httpx
+import httpx2
 import openai
 import pytest
 
@@ -21,7 +21,7 @@ TOOLS = [
         parameters={"type": "object", "properties": {}},
     )
 ]
-REQUEST = httpx.Request("POST", "https://api.openai.test/v1/chat/completions")
+REQUEST = httpx2.Request("POST", "https://api.openai.test/v1/chat/completions")
 
 
 class StubCompletions:
@@ -38,17 +38,17 @@ class StubCompletions:
 
 def make_client(result: Any) -> tuple[OpenAIClient, StubCompletions]:
     completions = StubCompletions(result)
-    stub = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    stub = cast(openai.AsyncOpenAI, SimpleNamespace(chat=SimpleNamespace(completions=completions)))
     return OpenAIClient(api_key="unused", model="test-model", client=stub), completions
 
 
-def completion(content: str | None = None, tool_calls: list | None = None) -> Any:
+def completion(content: str | None = None, tool_calls: list[Any] | None = None) -> Any:
     message = SimpleNamespace(content=content, tool_calls=tool_calls)
     return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
 
 def status_error(status: int) -> openai.APIStatusError:
-    response = httpx.Response(status, request=REQUEST)
+    response = httpx2.Response(status, request=REQUEST)
     return openai.APIStatusError("boom", response=response, body=None)
 
 
@@ -89,7 +89,7 @@ async def test_maps_tool_calls_and_sends_neutral_messages() -> None:
         status_error(429),
         status_error(500),
         status_error(503),
-        openai.APIResponseValidationError(response=httpx.Response(200, request=REQUEST), body={}),
+        openai.APIResponseValidationError(response=httpx2.Response(200, request=REQUEST), body={}),
     ],
 )
 async def test_temporary_failures_are_transient(error: Exception) -> None:

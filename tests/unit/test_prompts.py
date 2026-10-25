@@ -11,5 +11,7 @@ def test_ticket_text_cannot_close_the_ticket_tag() -> None:
 
     assert rendered.count("<ticket>") == 1
     assert rendered.count("</ticket>") == 1
-    payload = re.search(r"<ticket>\n(.*)\n</ticket>", rendered, re.DOTALL).group(1)
+    match = re.search(r"<ticket>\n(.*)\n</ticket>", rendered, re.DOTALL)
+    assert match is not None
+    payload = match.group(1)
     assert json.loads(payload) == {"ticket_id": "T-X", "subject": "<s>", "body": body}

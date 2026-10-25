@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from northdesk_ticket_agent.agent.agent import TicketAgent
@@ -31,7 +33,7 @@ async def test_example_tickets(
     category: str,
     priority: str,
     action: str,
-    details: dict,
+    details: dict[str, Any],
     datastore: DataStore,
     example_tickets: dict[str, Ticket],
 ) -> None:

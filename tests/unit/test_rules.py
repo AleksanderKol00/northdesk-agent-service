@@ -1,8 +1,11 @@
+from typing import Any
+
 import pytest
 
 from northdesk_ticket_agent.domain.models import (
     ActionType,
     Category,
+    Decision,
     Invoice,
     Priority,
     ProposedDecision,
@@ -25,7 +28,7 @@ INVOICES = [
 KB_IDS = {"KB-1", "KB-2"}
 
 
-def check(**fields) -> object:
+def check(**fields: Any) -> Decision:
     proposed = ProposedDecision(**{"category": "billing", "priority": "normal", **fields})
     return check_decision(proposed, TICKET, INVOICES, KB_IDS)
 
@@ -40,7 +43,7 @@ def check(**fields) -> object:
         ({"action": "close", "reason": "spam"}, ActionType.CLOSE),
     ],
 )
-def test_valid_decisions_pass_unchanged(fields: dict, expected_type: ActionType) -> None:
+def test_valid_decisions_pass_unchanged(fields: dict[str, Any], expected_type: ActionType) -> None:
     decision = check(**fields)
     assert decision.violations == []
     assert decision.action.type == expected_type
@@ -70,7 +73,7 @@ def test_valid_decisions_pass_unchanged(fields: dict, expected_type: ActionType)
         ({"action": "close", "reason": ""}, "close needs a reason"),
     ],
 )
-def test_broken_rule_becomes_escalation(fields: dict, violation: str) -> None:
+def test_broken_rule_becomes_escalation(fields: dict[str, Any], violation: str) -> None:
     decision = check(**fields)
     assert decision.action.type == ActionType.ESCALATE
     assert any(violation in v for v in decision.violations), decision.violations

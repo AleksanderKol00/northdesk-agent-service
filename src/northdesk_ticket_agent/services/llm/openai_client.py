@@ -1,6 +1,7 @@
-from typing import Any
+from typing import Any, cast
 
 import openai
+from openai.types.chat import ChatCompletionFunctionToolParam, ChatCompletionMessageParam
 
 from northdesk_ticket_agent.services.llm.base import (
     LLMPermanentError,
@@ -34,7 +35,11 @@ class OpenAIClient:
         try:
             completion = await self._client.chat.completions.create(
                 model=self._model,
-                messages=[to_openai_message(m) for m in messages],
+                # The dicts follow the SDK's message shapes, but a role-dependent dict
+                # can't be narrowed to its TypedDict statically.
+                messages=cast(
+                    list[ChatCompletionMessageParam], [to_openai_message(m) for m in messages]
+                ),
                 tools=[to_openai_tool(t) for t in tools],
                 tool_choice="required",
             )
@@ -52,7 +57,7 @@ class OpenAIClient:
         return from_openai_message(completion.choices[0].message)
 
 
-def to_openai_tool(tool: ToolSpec) -> dict[str, Any]:
+def to_openai_tool(tool: ToolSpec) -> ChatCompletionFunctionToolParam:
     return {
         "type": "function",
         "function": {

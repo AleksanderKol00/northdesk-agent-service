@@ -1,5 +1,6 @@
 import json
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -20,11 +21,16 @@ class ScriptedLLM:
         return self._responses.pop(0)
 
 
-def tool_call(name: str, arguments: dict | str | None = None, call_id: str = "c1") -> LLMResponse:
+def tool_call(
+    name: str, arguments: dict[str, Any] | str | None = None, call_id: str = "c1"
+) -> LLMResponse:
     args = arguments if isinstance(arguments, str) else json.dumps(arguments or {})
     return LLMResponse(tool_calls=[ToolCall(id=call_id, name=name, arguments=args)])
 
 
+ScriptedLLMFactory = Callable[..., ScriptedLLM]
+
+
 @pytest.fixture
-def scripted_llm() -> Callable[..., ScriptedLLM]:
+def scripted_llm() -> ScriptedLLMFactory:
     return lambda *responses: ScriptedLLM(list(responses))

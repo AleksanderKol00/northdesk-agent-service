@@ -1,6 +1,7 @@
 import json
 import re
 from importlib import resources
+from typing import Any
 
 from northdesk_ticket_agent.domain.models import Customer, Invoice, KbArticle, Ticket
 
@@ -66,6 +67,7 @@ def load_example_tickets() -> list[Ticket]:
     return [Ticket(**row) for row in _load("tickets.json")]
 
 
-def _load(name: str) -> list[dict]:
+def _load(name: str) -> list[dict[str, Any]]:
     text = resources.files("northdesk_ticket_agent.data").joinpath(name).read_text("utf-8")
-    return json.loads(text)
+    rows: list[dict[str, Any]] = json.loads(text)
+    return rows
