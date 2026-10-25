@@ -12,6 +12,7 @@ dependencies = [
     "openai>=3.37.0",
     "pydantic>=2.14.1",
     "pydantic-settings>=2.16.1",
+    "temporalio>=1.34.0",
 ]
 
 [build-system]
@@ -93,10 +94,11 @@ root_packages = ["northdesk_ticket_agent"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Layers: main -> agent -> services -> domain"
+name = "Layers: main -> orchestration -> agent -> services -> domain"
 type = "layers"
 layers = [
     "northdesk_ticket_agent.main",
+    "northdesk_ticket_agent.orchestration",
     "northdesk_ticket_agent.agent",
     "northdesk_ticket_agent.services",
     "northdesk_ticket_agent.domain",
@@ -127,3 +129,13 @@ source_modules = [
 ]
 forbidden_modules = ["openai"]
 allow_indirect_imports = true  # going through services.llm.factory is the point
+
+[[tool.importlinter.contracts]]
+name = "Temporal stays out of the agent, services and domain"
+type = "forbidden"
+source_modules = [
+    "northdesk_ticket_agent.agent",
+    "northdesk_ticket_agent.services",
+    "northdesk_ticket_agent.domain",
+]
+forbidden_modules = ["temporalio"]
