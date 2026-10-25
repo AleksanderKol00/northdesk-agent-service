@@ -5,7 +5,8 @@ from pydantic import BaseModel, Field
 
 
 class Ticket(BaseModel):
-    ticket_id: str
+    # Also the workflow ID and part of the API path and the Helpdesk idempotency key, so kept to URL-safe characters.
+    ticket_id: str = Field(pattern=r"^[A-Za-z0-9_.-]{1,64}$")
     customer_id: str
     subject: str
     body: str
