@@ -1,11 +1,11 @@
 import pytest
 
 from northdesk_ticket_agent.services.errors import ServiceError, TemporaryServiceError
-from northdesk_ticket_agent.services.helpdesk import HelpdeskConflictError
+from northdesk_ticket_agent.services.helpdesk import HelpdeskConflictError, HelpdeskTemporaryError
 from northdesk_ticket_agent.services.llm.base import LLMPermanentError, LLMTransientError
 
 
-@pytest.mark.parametrize("error", [LLMTransientError])
+@pytest.mark.parametrize("error", [LLMTransientError, HelpdeskTemporaryError])
 def test_temporary_errors_share_one_base(error: type[ServiceError]) -> None:
     assert issubclass(error, TemporaryServiceError)
 

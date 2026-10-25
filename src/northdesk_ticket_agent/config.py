@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     agent_max_steps: int = 8
     agent_max_decision_attempts: int = 3
+
+    helpdesk_failure_rate: float = Field(default=0.2, ge=0.0, le=1.0)
 
     @field_validator("openai_api_key", mode="before")
     @classmethod

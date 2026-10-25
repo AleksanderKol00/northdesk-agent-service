@@ -32,3 +32,9 @@ async def test_agent_uses_limits_from_settings(datastore: DataStore, example_tic
     agent = TicketAgent.from_settings(settings(agent_max_steps=1), datastore)
     with pytest.raises(AgentStepLimitError):
         await agent.decide(example_tickets["T-1"])
+
+
+@pytest.mark.parametrize("rate", [-0.1, 1.5])
+def test_helpdesk_failure_rate_must_be_between_zero_and_one(rate: float) -> None:
+    with pytest.raises(ValueError, match="helpdesk_failure_rate"):
+        settings(helpdesk_failure_rate=rate)
