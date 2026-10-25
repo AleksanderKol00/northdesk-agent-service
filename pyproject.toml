@@ -1,0 +1,37 @@
+[project]
+name = "northdesk-ticket-agent"
+version = "0.1.0"
+description = "Resilient backend that processes Northdesk support tickets in several steps with an AI agent."
+readme = "README.md"
+authors = [
+    { name = "Aleksander Kolowski", email = "kolowskialeksander@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi[standard]>=0.162.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "ruff>=0.17.2",
+]
+
+[tool.fastapi]
+entrypoint = "northdesk_ticket_agent.main:app"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["--import-mode=importlib"]
