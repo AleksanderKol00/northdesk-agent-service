@@ -43,6 +43,7 @@ _RECORD_ATTRIBUTES = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, No
     "message",
     "asctime",
     "color_message",
+    "temporal_log",  # a forwarded Temporal Core line; its parts are added by `_core_fields`
 }
 
 _context: ContextVar[dict[str, Any] | None] = ContextVar("log_context", default=None)
@@ -80,6 +81,7 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
         line |= _temporal_ids(record)
+        line |= _core_fields(record)
         # Read when the line is formatted, which a stream handler does in the caller's thread and context.
         line |= _context.get() or {}
         line |= {
@@ -109,6 +111,18 @@ def configure_logging(level: LogLevel = "INFO", stream: TextIO | None = None) ->
         logger.propagate = True
         logger.setLevel(logging.NOTSET)  # the root's level applies
     logging.getLogger(UVICORN_ACCESS_LOGGER).disabled = True
+
+
+def _core_fields(record: logging.LogRecord) -> dict[str, Any]:
+    """The target and fields of a line forwarded from Temporal Core (the SDK's Rust part), if this is one."""
+    core = getattr(record, "temporal_log", None)
+    if core is None:
+        return {}
+    fields = dict(core.fields)
+    line: dict[str, Any] = {"core_target": core.target, "core_fields": fields}
+    if isinstance(fields.get("workflow_id"), str):
+        line["workflow_id"] = fields["workflow_id"]
+    return line
 
 
 def _temporal_ids(record: logging.LogRecord) -> dict[str, Any]:
