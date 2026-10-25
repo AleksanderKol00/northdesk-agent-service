@@ -85,6 +85,7 @@ async def test_a_refund_is_approved_and_issued(
 
     assert isinstance(waiting.action, RefundAction)
     assert answered.approval == Approval(approved=True)
+    assert answered.action == waiting.action
     assert done.action == waiting.action
     assert [receipt.action for receipt in helpdesk.performed] == [waiting.action]
 
