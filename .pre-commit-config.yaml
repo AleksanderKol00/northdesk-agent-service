@@ -17,6 +17,20 @@ repos:
       - id: check-added-large-files
       - id: detect-private-key
       - id: debug-statements
+      # Work happens on a branch and lands through a PR (see CLAUDE.md).
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  # Secrets such as an OPENAI_API_KEY, which detect-private-key (PEM keys only) misses.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.51.1
+    hooks:
+      - id: typos
 
   - repo: local
     hooks:
@@ -56,6 +70,15 @@ repos:
         language: system
         types: [python]
         files: ^src/
+        pass_filenames: false
+        require_serial: true
+
+      # Every third-party import in src/ is a declared dependency, and every dependency is used.
+      - id: deptry
+        name: deptry
+        entry: uv run deptry src
+        language: system
+        files: ^(src/.*\.py|pyproject\.toml|uv\.lock)$
         pass_filenames: false
         require_serial: true
 

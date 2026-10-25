@@ -17,6 +17,7 @@ uv run pytest tests/integration                           # integration tests on
 uv run ruff check . && uv run ruff format .               # lint / format
 uv run mypy                                                # type check (strict)
 uv run lint-imports                                       # package boundaries
+uv run deptry src                                         # declared vs. imported deps
 uv run pre-commit install --install-hooks                # once: git hooks
 uv run pre-commit run --all-files                        # all hooks by hand
 ```

@@ -42,6 +42,7 @@ uv run pytest tests/unit/test_health.py::test_health_returns_ok   # single test
 uv run ruff check . && uv run ruff format .               # lint / format
 uv run mypy                                                # type check (strict)
 uv run lint-imports                                       # package boundaries
+uv run deptry src                                         # declared vs. imported deps
 uv run pre-commit install --install-hooks                # once: git hooks
 uv run pre-commit run --all-files                        # all hooks by hand
 ```
@@ -50,7 +51,7 @@ Ruff: line length 100; rules `E, F, I, UP, B` plus `S` (bandit), `BLE`, `ASYNC`,
 
 import-linter (`[tool.importlinter]` in `pyproject.toml`) enforces the package boundaries above: layers `main → agent → services → domain`, `domain` imports no FastAPI/OpenAI/config, and only `services/llm/openai_client.py` imports `openai` directly.
 
-Pre-commit (`.pre-commit-config.yaml`): file hygiene, `uv lock --check`, ruff, mypy, import-linter on commit; pytest on push. Hooks run through `uv run`, so tool versions come from `uv.lock`. The FastAPI entrypoint is configured in `pyproject.toml` as `northdesk_ticket_agent.main:app`.
+Pre-commit (`.pre-commit-config.yaml`): file hygiene, no commits on `main`, gitleaks (secrets), typos, `uv lock --check`, ruff, mypy, import-linter, deptry (every third-party import in `src/` must be a declared dependency) on commit; pytest on push. Hooks run through `uv run`, so tool versions come from `uv.lock`. The FastAPI entrypoint is configured in `pyproject.toml` as `northdesk_ticket_agent.main:app`.
 
 ## Git
 
