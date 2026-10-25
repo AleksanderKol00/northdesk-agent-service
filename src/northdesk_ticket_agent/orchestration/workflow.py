@@ -118,7 +118,8 @@ class TicketWorkflow:
             )
         except ActivityError as err:
             state.action = EscalateAction(reason=f"Could not decide automatically: {_describe(err)}")
-            workflow.logger.warning("Could not decide automatically; escalating", extra={"reason": _describe(err)})
+            # The type only: the message can quote the model's arguments (an unreadable decision), and so the ticket.
+            workflow.logger.warning("Could not decide automatically; escalating", extra={"error": _error_type(err)})
         else:
             state.action = state.decision.action
             if isinstance(state.action, RefundAction):
@@ -157,10 +158,13 @@ class TicketWorkflow:
         with suppress(TimeoutError):
             await workflow.wait_condition(lambda: state.approval is not None, timeout=APPROVAL_TIMEOUT)
         outcome = _approval_outcome(state.approval, refund)
-        if isinstance(outcome, EscalateAction):
-            workflow.logger.info("Refund not approved; escalating", extra={"reason": outcome.reason})
-        else:
+        # Not the reason: it carries the reviewer's free-text comment.
+        if state.approval is None:
+            workflow.logger.info("No answer in time; escalating the refund")
+        elif state.approval.approved:
             workflow.logger.info("Refund approved")
+        else:
+            workflow.logger.info("Refund rejected; escalating")
         return outcome
 
     @workflow.query(name="status")
@@ -218,6 +222,14 @@ def _describe(err: ActivityError) -> str:
     if isinstance(cause, ApplicationError) and cause.type:
         return f"{cause.type}: {cause.message}"
     return str(cause or err)
+
+
+def _error_type(err: ActivityError) -> str:
+    """The original error's type (e.g. `UnknownCustomerError`), or Temporal's own (e.g. `TimeoutError`)."""
+    cause = err.cause
+    if isinstance(cause, ApplicationError) and cause.type:
+        return cause.type
+    return type(cause or err).__name__
 
 
 def _hours(delta: timedelta) -> int:

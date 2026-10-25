@@ -2,7 +2,13 @@ import pytest
 from temporalio.exceptions import ActivityError, ApplicationError, TimeoutError, TimeoutType
 
 from northdesk_ticket_agent.domain.models import EscalateAction, RefundAction, ReplyAction
-from northdesk_ticket_agent.orchestration.workflow import Approval, _action_failure, _approval_outcome, _describe
+from northdesk_ticket_agent.orchestration.workflow import (
+    Approval,
+    _action_failure,
+    _approval_outcome,
+    _describe,
+    _error_type,
+)
 
 
 def activity_error(cause: BaseException | None) -> ActivityError:
@@ -82,3 +88,18 @@ def test_approval_outcome(approval: Approval | None, expected: object) -> None:
 def test_action_failure_says_whether_the_action_may_have_happened(cause: BaseException, expected: str) -> None:
     action = ReplyAction(message="See KB-1.", article_ids=["KB-1"])
     assert _action_failure(action, activity_error(cause)) == expected
+
+
+@pytest.mark.parametrize(
+    ("cause", "expected"),
+    [
+        (ApplicationError("unknown customer C-999", type="UnknownCustomerError"), "UnknownCustomerError"),
+        (
+            TimeoutError("activity StartToClose timeout", type=TimeoutType.START_TO_CLOSE, last_heartbeat_details=[]),
+            "TimeoutError",
+        ),
+        (None, "ActivityError"),
+    ],
+)
+def test_error_type_names_the_error_without_its_message(cause: BaseException | None, expected: str) -> None:
+    assert _error_type(activity_error(cause)) == expected

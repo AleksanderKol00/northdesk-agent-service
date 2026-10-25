@@ -14,6 +14,7 @@ from northdesk_ticket_agent.agent.tools import (
     TOOL_SPECS,
     ToolExecutor,
     format_validation_error,
+    validation_problems,
 )
 from northdesk_ticket_agent.config import Settings
 from northdesk_ticket_agent.domain.models import ProposedDecision, Ticket
@@ -90,7 +91,8 @@ class TicketAgent:
                             extra={"errors": exc.error_count(), "attempt": failed_attempts + 1},
                         )
                         failed_attempts += 1
-                        self._raise_if_out_of_attempts(failed_attempts, str(exc))
+                        # Not str(exc), which quotes the model: this message reaches the logs and the escalation.
+                        self._raise_if_out_of_attempts(failed_attempts, validation_problems(exc))
                         result = format_validation_error(exc)
                 # Every tool call gets an answer, so the conversation stays well formed.
                 messages.append(Message(role="tool", tool_call_id=call.id, content=result))

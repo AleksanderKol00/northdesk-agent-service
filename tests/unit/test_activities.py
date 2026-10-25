@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import random
 import signal
@@ -158,6 +159,41 @@ async def test_check_uses_the_tickets_customer_for_ownership(
 
     assert isinstance(decision.action, EscalateAction)
     assert decision.violations == ["invoice INV-1002 does not belong to customer C-200"]
+
+
+async def test_check_logs_the_count_of_violations_not_what_the_model_wrote(
+    datastore: DataStore, example_tickets: dict[str, Ticket], caplog: pytest.LogCaptureFixture
+) -> None:
+    proposed = ProposedDecision(category="pizza near your office", priority="normal", action="close", reason="spam")
+
+    with caplog.at_level(logging.INFO):
+        decision = await ActivityEnvironment().run(
+            activities(datastore).check, CheckInput(ticket=example_tickets["T-5"], proposed=proposed)
+        )
+
+    [warning] = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("pizza" in violation for violation in decision.violations)
+    assert getattr(warning, "violations") == len(decision.violations)  # noqa: B009
+    assert not any("pizza" in str(vars(r)) for r in caplog.records)
+
+
+async def test_decide_does_not_log_the_unchecked_action(
+    scripted_llm: ScriptedLLMFactory,
+    datastore: DataStore,
+    example_tickets: dict[str, Ticket],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    llm = scripted_llm(
+        tool_call("submit_decision", {"category": "other", "priority": "low", "action": "pizza now", "reason": "x"})
+    )
+
+    with caplog.at_level(logging.INFO):
+        await ActivityEnvironment().run(
+            TicketActivities(TicketAgent(llm, datastore), datastore, FakeHelpdesk()).decide, example_tickets["T-5"]
+        )
+
+    assert any(message.startswith("Agent proposed a decision") for message in caplog.messages)
+    assert not any("pizza" in str(vars(r)) for r in caplog.records)
 
 
 async def test_check_rejects_unknown_articles(datastore: DataStore, example_tickets: dict[str, Ticket]) -> None:

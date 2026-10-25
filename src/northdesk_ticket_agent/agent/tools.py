@@ -92,8 +92,12 @@ class ToolExecutor:
 
 
 def format_validation_error(exc: ValidationError) -> str:
-    problems = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
-    return _error(f"decision is invalid: {problems}. Call {SUBMIT_DECISION} again.")
+    return _error(f"decision is invalid: {validation_problems(exc)}. Call {SUBMIT_DECISION} again.")
+
+
+def validation_problems(exc: ValidationError) -> str:
+    """Which fields are wrong and why, without the values: unlike `str(exc)`, nothing the model wrote is repeated."""
+    return "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors(include_input=False))
 
 
 def _error(message: str) -> str:

@@ -84,12 +84,16 @@ async def test_gives_up_after_repeated_unreadable_decisions(
     llm = scripted_llm(
         tool_call("submit_decision", "not json"),
         LLMResponse(content="I think we should close it."),
-        tool_call("submit_decision", {"action": "close"}),
+        tool_call("submit_decision", {"action": "close", "category": "pizza near your office"}),
     )
     agent = TicketAgent(llm, datastore, max_decision_attempts=3)
 
-    with pytest.raises(DecisionParseError):
+    with pytest.raises(DecisionParseError) as raised:
         await agent.decide(example_tickets["T-5"])
+
+    # Names the fields, but repeats nothing the model wrote: the message reaches the logs and the escalation reason.
+    assert "priority: Field required" in str(raised.value)
+    assert "pizza" not in str(raised.value)
 
 
 async def test_unknown_customer_fails_without_calling_the_llm(

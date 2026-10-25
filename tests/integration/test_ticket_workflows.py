@@ -276,4 +276,5 @@ async def test_a_failed_activity_is_logged_with_the_ticket(
     assert "UnknownCustomerError" in failed["exception"]
     [escalated] = [line for line in lines if line["message"] == "Could not decide automatically; escalating"]
     assert escalated["level"] == "WARNING"
-    assert escalated["reason"].startswith("UnknownCustomerError")
+    assert escalated["error"] == "UnknownCustomerError"
+    assert "reason" not in escalated
