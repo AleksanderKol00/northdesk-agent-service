@@ -123,7 +123,7 @@ class TicketWorkflow:
             )
         except ActivityError as err:
             state.step = Step.FAILED
-            state.error = f"Could not carry out {state.action.type}: {_describe(err)}"
+            state.error = _action_failure(state.action, err)
             raise ApplicationError(state.error, type="ActionFailed", non_retryable=True) from err
 
         state.step = Step.DONE
@@ -161,6 +161,21 @@ def _approval_outcome(approval: Approval | None, refund: RefundAction) -> Action
     if approval is None:
         return EscalateAction(reason=f"No approval within {_hours(APPROVAL_TIMEOUT)} h for the {what}")
     return EscalateAction(reason=f"The {what} was rejected" + (f": {approval.comment}" if approval.comment else ""))
+
+
+def _action_failure(action: Action, err: ActivityError) -> str:
+    """Why the action failed for good, and whether it may still have happened.
+
+    A non-retryable error (a conflicting idempotency key) is raised before the Helpdesk acts. After temporary errors or
+    timeouts the last attempt may have acted and lost its response, so the action may have been carried out.
+    """
+    cause = err.cause
+    if isinstance(cause, ApplicationError) and cause.non_retryable:
+        return f"Could not carry out {action.type}: {_describe(err)}"
+    return (
+        f"Gave up on {action.type}, which may have been carried out; check the Helpdesk before doing it again: "
+        f"{_describe(err)}"
+    )
 
 
 def _describe(err: ActivityError) -> str:
