@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 import pytest
-from temporalio import activity
+from temporalio import activity, workflow
 from temporalio.client import WorkflowUpdateFailedError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
@@ -140,6 +140,34 @@ async def test_no_worker_answering_is_unavailable(
         await workflows.status(ticket.ticket_id)
     with pytest.raises(TicketWorkflowsUnavailableError):
         await workflows.approve(ticket.ticket_id, Approval(approved=True))
+
+
+@workflow.defn(name="TicketWorkflow", sandboxed=False)
+class BrokenStatusWorkflow:
+    """Registered under the real workflow's name, with a `status` query that fails in the worker."""
+
+    @workflow.run
+    async def run(self, ticket: Ticket) -> None:
+        await workflow.wait_condition(lambda: False)
+
+    @workflow.query(name="status")
+    def status(self) -> TicketState:
+        raise RuntimeError("the state cannot be read")
+
+
+async def test_a_failing_query_is_unavailable(
+    isolated_workflow_env: WorkflowEnvironment, example_tickets: dict[str, Ticket]
+) -> None:
+    client = isolated_workflow_env.client
+    task_queue = f"test-{uuid.uuid4()}"
+    async with Worker(client, task_queue=task_queue, workflows=[BrokenStatusWorkflow]):
+        workflows = TemporalTicketWorkflows(client, task_queue)
+        ticket = fresh(example_tickets["T-1"])
+        await workflows.start(ticket)
+
+        with pytest.raises(TicketWorkflowsUnavailableError):
+            await workflows.status(ticket.ticket_id)
+        await client.get_workflow_handle(ticket.ticket_id).terminate()
 
 
 async def test_nothing_to_approve_once_finished(

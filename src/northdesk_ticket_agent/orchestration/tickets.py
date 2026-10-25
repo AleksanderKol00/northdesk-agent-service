@@ -8,7 +8,14 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Protocol
 
-from temporalio.client import Client, RPCTimeoutOrCancelledError, WorkflowHandle, WorkflowUpdateFailedError
+from temporalio.client import (
+    Client,
+    RPCTimeoutOrCancelledError,
+    WorkflowHandle,
+    WorkflowQueryFailedError,
+    WorkflowQueryRejectedError,
+    WorkflowUpdateFailedError,
+)
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError, RPCStatusCode
@@ -72,6 +79,8 @@ class TemporalTicketWorkflows:
             return await self._handle(ticket_id).query(TicketWorkflow.status, rpc_timeout=self._rpc_timeout)
         except RPCError as err:
             raise _translate(err, ticket_id) from err
+        except (WorkflowQueryFailedError, WorkflowQueryRejectedError) as err:  # the worker answered, but with an error
+            raise TicketWorkflowsUnavailableError from err
 
     async def approve(self, ticket_id: str, approval: Approval) -> TicketState:
         handle = self._handle(ticket_id)
