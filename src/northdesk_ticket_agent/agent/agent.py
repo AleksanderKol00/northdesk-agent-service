@@ -1,6 +1,7 @@
 import json
 import logging
 
+from opentelemetry import trace
 from pydantic import ValidationError
 
 from northdesk_ticket_agent.agent.errors import (
@@ -23,6 +24,10 @@ from northdesk_ticket_agent.services.llm.base import LLMClient, Message
 from northdesk_ticket_agent.services.llm.factory import build_llm_client
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
+
+# A tool name comes from the model: only names we offer go into a span, so it can't carry text of its own.
+_TOOL_NAMES = frozenset(spec.name for spec in TOOL_SPECS)
 
 _NO_DECISION_REMINDER = f"Reply only with tool calls. Call {SUBMIT_DECISION} to finish."
 
@@ -62,8 +67,14 @@ class TicketAgent:
         ]
         failed_attempts = 0
 
-        for _ in range(self._max_steps):
-            response = await self._llm.complete(messages, TOOL_SPECS)
+        for step in range(1, self._max_steps + 1):
+            # Span names and attributes after OpenTelemetry's GenAI conventions. Counts only: the content is the
+            # ticket's and the model's.
+            with tracer.start_as_current_span(
+                "chat", attributes={"gen_ai.operation.name": "chat", "agent.step": step}
+            ) as span:
+                response = await self._llm.complete(messages, TOOL_SPECS)
+                span.set_attribute("gen_ai.response.tool_calls", len(response.tool_calls))
             messages.append(response.as_message())
 
             if not response.tool_calls:
@@ -78,7 +89,12 @@ class TicketAgent:
                 if call.name != SUBMIT_DECISION:
                     # The name only: arguments are the model's, and may repeat the ticket's text.
                     logger.info("Tool call: %s", call.name, extra={"tool": call.name})
-                    result = tools.run(call.name, call.arguments)
+                    tool = call.name if call.name in _TOOL_NAMES else "unknown"
+                    with tracer.start_as_current_span(
+                        f"execute_tool {tool}",
+                        attributes={"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": tool},
+                    ):
+                        result = tools.run(call.name, call.arguments)
                 elif decision is not None:
                     result = json.dumps({"error": "only one decision is allowed"})
                 else:

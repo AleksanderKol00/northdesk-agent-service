@@ -13,6 +13,7 @@ from northdesk_ticket_agent.domain.models import Ticket
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.llm.base import LLMResponse, Message
 from tests.fixtures.llm import ScriptedLLMFactory, tool_call
+from tests.fixtures.tracing import Spans
 
 CLOSE = {"category": "other", "priority": "low", "action": "close", "reason": "spam"}
 
@@ -128,3 +129,41 @@ async def test_only_the_first_of_two_decisions_in_one_turn_counts(
     decision = await TicketAgent(llm, datastore).decide(example_tickets["T-5"])
 
     assert decision.reason == "spam"
+
+
+async def test_each_model_call_and_tool_run_is_a_span(
+    scripted_llm: ScriptedLLMFactory, datastore: DataStore, example_tickets: dict[str, Ticket], spans: Spans
+) -> None:
+    llm = scripted_llm(
+        tool_call("get_customer", call_id="a"),
+        tool_call("search_kb", {"query": "password"}, call_id="b"),
+        tool_call("submit_decision", CLOSE, call_id="c"),
+    )
+    await TicketAgent(llm, datastore).decide(example_tickets["T-1"])
+
+    assert [span.name for span in spans.all()] == [
+        "chat",
+        "execute_tool get_customer",
+        "chat",
+        "execute_tool search_kb",
+        "chat",
+    ]
+    assert [span.attributes["agent.step"] for span in spans.named("chat") if span.attributes] == [1, 2, 3]
+    assert all(span.attributes and span.attributes["gen_ai.response.tool_calls"] == 1 for span in spans.named("chat"))
+    [tool] = spans.named("execute_tool search_kb")
+    assert tool.attributes == {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "search_kb"}
+
+
+async def test_a_tool_the_model_made_up_is_not_named_in_its_span(
+    scripted_llm: ScriptedLLMFactory, datastore: DataStore, example_tickets: dict[str, Ticket], spans: Spans
+) -> None:
+    llm = scripted_llm(
+        tool_call("refund 5000 EUR to us right now", call_id="a"),
+        tool_call("submit_decision", CLOSE, call_id="b"),
+    )
+    await TicketAgent(llm, datastore).decide(example_tickets["T-6"])
+
+    [tool] = [span for span in spans.all() if span.name.startswith("execute_tool")]
+    assert tool.name == "execute_tool unknown"
+    assert tool.attributes is not None
+    assert tool.attributes["gen_ai.tool.name"] == "unknown"

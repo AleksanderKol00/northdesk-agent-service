@@ -15,6 +15,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Any
 
+from opentelemetry import trace
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
@@ -77,6 +78,11 @@ class TicketActivities:
                     f"Checking the decision failed: {type(exc).__name__}", type=type(exc).__name__, non_retryable=True
                 ) from exc
             fields = {"action": decision.action.type, "category": decision.category, "priority": decision.priority}
+            # Checked values, so they can go on the activity's span: a trace search can then find, say, the refunds.
+            trace.get_current_span().set_attributes(
+                {f"ticket.{key}": str(value) for key, value in fields.items()}
+                | {"ticket.violations": len(decision.violations)}
+            )
             if decision.violations:
                 # The count only: the violations quote the model's values, which may repeat the ticket's text.
                 activity.logger.warning(

@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from decimal import Decimal
 
 import pytest
+from opentelemetry import trace
 from temporalio.exceptions import ApplicationError
 from temporalio.testing import ActivityEnvironment
 
@@ -35,6 +36,7 @@ from northdesk_ticket_agent.services.llm.base import (
 )
 from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
 from tests.fixtures.llm import ScriptedLLMFactory, tool_call
+from tests.fixtures.tracing import Spans
 
 REFUND = RefundAction(invoice_id="INV-1002", amount_eur=Decimal("49.0"))
 
@@ -145,6 +147,28 @@ async def test_check_accepts_a_valid_refund(datastore: DataStore, example_ticket
 
     assert decision.action == REFUND
     assert decision.violations == []
+
+
+async def test_check_puts_the_checked_decision_on_the_activity_span(
+    datastore: DataStore, example_tickets: dict[str, Ticket], spans: Spans
+) -> None:
+    proposed = ProposedDecision(
+        category="billing", priority="normal", action="refund", invoice_id="INV-1001", amount_eur=500.0
+    )
+
+    # Temporal's tracing interceptor opens this span around a real activity.
+    with trace.get_tracer(__name__).start_as_current_span("RunActivity:ticket.check"):
+        await ActivityEnvironment().run(
+            activities(datastore).check, CheckInput(ticket=example_tickets["T-2"], proposed=proposed)
+        )
+
+    [span] = spans.all()
+    assert span.attributes == {
+        "ticket.action": "escalate",  # more than the invoice
+        "ticket.category": "billing",
+        "ticket.priority": "normal",
+        "ticket.violations": 1,
+    }
 
 
 async def test_check_fails_at_once_on_an_unexpected_error(

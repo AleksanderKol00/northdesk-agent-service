@@ -5,4 +5,5 @@ pytest_plugins = [
     "tests.fixtures.llm",
     "tests.fixtures.logs",
     "tests.fixtures.temporal",
+    "tests.fixtures.tracing",
 ]
