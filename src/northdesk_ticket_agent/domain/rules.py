@@ -86,7 +86,9 @@ def _check_close(
     if not reason:
         violations.append("close needs a reason")
     # Closing ends a ticket with nobody looking at it, so it is only for tickets that aren't about our product
-    # (spam, off-topic). A ticket can claim to be resolved; an account, billing or technical one goes to a person.
+    # (spam, off-topic): a model that files a ticket as account, billing or technical and then closes it (say, because
+    # the ticket claims to be resolved) is sent to a person. Both fields are the model's, so this catches an
+    # inconsistent decision, not a model talked into calling a real problem off-topic.
     if category is not None and category != Category.OTHER:
         violations.append(f"close is only for category {Category.OTHER}, not {category}")
     if violations or not reason:
