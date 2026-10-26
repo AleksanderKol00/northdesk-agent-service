@@ -33,9 +33,9 @@ class DataStore:
     @classmethod
     def from_package_data(cls) -> DataStore:
         return cls(
-            customers=[Customer(**row) for row in _load("customers.json")],
-            invoices=[Invoice(**row) for row in _load("invoices.json")],
-            articles=[KbArticle(**row) for row in _load("kb.json")],
+            customers=[Customer(**row) for row in load_package_data("customers.json")],
+            invoices=[Invoice(**row) for row in load_package_data("invoices.json")],
+            articles=[KbArticle(**row) for row in load_package_data("kb.json")],
         )
 
     def get_customer(self, customer_id: str) -> Customer | None:
@@ -61,7 +61,8 @@ class DataStore:
         return [article for _, article in scored[:limit]]
 
 
-def _load(name: str) -> list[dict[str, Any]]:
+def load_package_data(name: str) -> list[dict[str, Any]]:
+    """The rows of one of the package's `data/*.json` files."""
     text = resources.files("northdesk_ticket_agent.data").joinpath(name).read_text("utf-8")
     rows: list[dict[str, Any]] = json.loads(text)
     return rows
