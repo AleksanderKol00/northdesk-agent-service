@@ -86,9 +86,8 @@ async def run_worker(settings: Settings) -> None:
 def main() -> None:
     settings = Settings()
     configure_worker_logging(settings.log_level)
-    tracing = configure_tracing(WORKER_SERVICE, settings.otel_exporter_otlp_endpoint)
+    stop_tracing = configure_tracing(WORKER_SERVICE)
     try:
         asyncio.run(run_worker(settings))
     finally:
-        if tracing is not None:
-            tracing.shutdown()  # sends the spans still waiting in the batch
+        stop_tracing()  # sends the spans still waiting in the batch

@@ -25,10 +25,7 @@ class Settings(BaseSettings):
 
     log_level: LogLevel = "INFO"
 
-    # OpenTelemetry's standard variable: the OTLP/HTTP collector's base URL. Unset, nothing is traced.
-    otel_exporter_otlp_endpoint: str | None = None
-
-    @field_validator("openai_api_key", "otel_exporter_otlp_endpoint", mode="before")
+    @field_validator("openai_api_key", mode="before")
     @classmethod
     def _blank_is_missing(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value

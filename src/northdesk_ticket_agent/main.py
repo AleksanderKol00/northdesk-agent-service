@@ -23,20 +23,19 @@ def create_app(workflows: TicketWorkflows | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        if workflows is None:
-            settings = Settings()
-            # Here rather than at import: uvicorn sets up its own logging first, and this replaces it.
-            configure_logging(settings.log_level)
-            tracing = configure_tracing(API_SERVICE, settings.otel_exporter_otlp_endpoint)
-            app.state.workflows = TemporalTicketWorkflows(await connect(settings), settings.temporal_task_queue)
-        else:
-            tracing = None
+        if workflows is not None:
             app.state.workflows = workflows
+            yield
+            return
+        settings = Settings()
+        # Here rather than at import: uvicorn sets up its own logging first, and this replaces it.
+        configure_logging(settings.log_level)
+        stop_tracing = configure_tracing(API_SERVICE)
         try:
+            app.state.workflows = TemporalTicketWorkflows(await connect(settings), settings.temporal_task_queue)
             yield
         finally:
-            if tracing is not None:
-                tracing.shutdown()  # sends the spans still waiting in the batch
+            stop_tracing()  # sends the spans still waiting in the batch
 
     app = FastAPI(
         title="Northdesk Ticket Agent",
