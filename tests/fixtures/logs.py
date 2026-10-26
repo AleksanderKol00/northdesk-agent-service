@@ -8,6 +8,7 @@ import pytest
 from temporalio import activity, workflow
 
 from northdesk_ticket_agent.logs import UVICORN_ACCESS_LOGGER, UVICORN_LOGGERS, json_handler
+from northdesk_ticket_agent.orchestration.worker import SDK_ACTIVITY_LOGGER
 
 
 class LogLines:
@@ -45,7 +46,7 @@ def json_logs(restore_logging: None) -> LogLines:
 @pytest.fixture
 def restore_logging() -> Iterator[None]:
     """Puts back the global logging setup that a test changes by calling `configure_logging`."""
-    loggers = [logging.getLogger(name) for name in ("", *UVICORN_LOGGERS, UVICORN_ACCESS_LOGGER)]
+    loggers = [logging.getLogger(name) for name in ("", *UVICORN_LOGGERS, UVICORN_ACCESS_LOGGER, SDK_ACTIVITY_LOGGER)]
     saved = [(logger, logger.handlers[:], logger.propagate, logger.level, logger.disabled) for logger in loggers]
     saved_temporal = (activity.logger.activity_info_on_message, workflow.logger.workflow_info_on_message)
     try:
