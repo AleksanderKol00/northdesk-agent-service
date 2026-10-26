@@ -63,7 +63,8 @@ docker compose logs --no-log-prefix api worker | jq -cR 'fromjson? | select(.tic
 ```
 
 Lines carry IDs, types and counts, never the ticket's text or anything the model wrote, which may repeat it, even at
-`DEBUG`: the SDK's line with each activity's result stays off. The API logs one line per request (health checks only at
+`DEBUG`: Temporal's SDK, the OpenAI client and its HTTP libraries stay at `INFO` then, since the SDK's DEBUG lines include
+each activity's result, so `DEBUG` adds only our own lines. The API logs one line per request (health checks only at
 `DEBUG`). Temporal's own lines, including those from its Rust core (connection and poll errors), are JSON too. Only the
 FastAPI CLI's banner and uvicorn's first two lines, written before the app starts, are plain text.
 

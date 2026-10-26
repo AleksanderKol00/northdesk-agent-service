@@ -6,9 +6,11 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import temporalio.worker._activity as sdk_activity
 from temporalio import activity, workflow
 
 from northdesk_ticket_agent.logs import (
+    LIBRARY_LOGGERS,
     UVICORN_ACCESS_LOGGER,
     JsonFormatter,
     bind_log_context,
@@ -16,7 +18,7 @@ from northdesk_ticket_agent.logs import (
     log_context,
 )
 from northdesk_ticket_agent.orchestration.client import CORE_LOGGER, core_logging
-from northdesk_ticket_agent.orchestration.worker import SDK_ACTIVITY_LOGGER, configure_worker_logging
+from northdesk_ticket_agent.orchestration.worker import configure_worker_logging
 
 logger = logging.getLogger("tests.logs")
 
@@ -166,18 +168,30 @@ def test_the_worker_keeps_temporal_details_out_of_the_message() -> None:
 
 
 @pytest.mark.usefixtures("restore_logging")
-def test_the_worker_keeps_activity_results_out_of_debug_logs(capsys: pytest.CaptureFixture[str]) -> None:
-    configure_worker_logging("DEBUG")
-    logging.getLogger(SDK_ACTIVITY_LOGGER).debug("Completing activity with completion: <what the model wrote>")
-    logging.getLogger(SDK_ACTIVITY_LOGGER).info("kept")
-    logging.getLogger("tests.logs").debug("other debug lines still go out")
+def test_debug_leaves_out_the_sdks_activity_results() -> None:
+    stream = io.StringIO()
 
-    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
-    assert [line["message"] for line in lines] == ["kept", "other debug lines still go out"]
+    configure_logging("DEBUG", stream)
+    # The SDK's own logger, wherever it lives: it writes each activity's result at DEBUG.
+    sdk_activity.logger.debug("Completing activity with completion: <what the model wrote>")
+    sdk_activity.logger.info("kept")
+    logging.getLogger("tests.logs").debug("our debug lines still go out")
+
+    lines = [json.loads(line) for line in stream.getvalue().splitlines()]
+    assert [line["message"] for line in lines] == ["kept", "our debug lines still go out"]
+
+
+@pytest.mark.parametrize("name", LIBRARY_LOGGERS)
+@pytest.mark.usefixtures("restore_logging")
+def test_debug_keeps_library_loggers_at_info(name: str) -> None:
+    configure_logging("DEBUG", io.StringIO())
+
+    assert logging.getLogger(f"{name}.any.submodule").getEffectiveLevel() == logging.INFO
 
 
 @pytest.mark.usefixtures("restore_logging")
-def test_the_worker_never_lowers_the_level_of_the_sdk_activity_logger() -> None:
-    configure_worker_logging("WARNING")
+def test_other_levels_apply_to_library_loggers_as_set() -> None:
+    configure_logging("DEBUG", io.StringIO())
+    configure_logging("WARNING", io.StringIO())
 
-    assert logging.getLogger(SDK_ACTIVITY_LOGGER).getEffectiveLevel() == logging.WARNING
+    assert all(logging.getLogger(name).getEffectiveLevel() == logging.WARNING for name in LIBRARY_LOGGERS)
