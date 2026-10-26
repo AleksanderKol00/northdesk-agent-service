@@ -45,9 +45,8 @@ class OpenAIClient:
             if exc.status_code in _TRANSIENT_STATUS or exc.status_code >= 500:
                 raise LLMTransientError(f"OpenAI returned {exc.status_code}") from exc
             raise LLMPermanentError(f"OpenAI returned {exc.status_code}: {exc}") from exc
-        except (
-            openai.OpenAIError
-        ) as exc:  # anything else (a response that doesn't match the schema): not worth retrying
+        # Anything else (a response that doesn't match the schema, say): not worth retrying.
+        except openai.OpenAIError as exc:
             raise LLMPermanentError(f"OpenAI call failed: {exc}") from exc
 
         if not completion.choices:

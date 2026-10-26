@@ -11,7 +11,11 @@ class TicketStarted(BaseModel):
 
 
 class TicketStatus(BaseModel):
-    """A ticket's state as the API shows it. Its own model, so the workflow's state can change without changing it."""
+    """A ticket's state as the API shows it.
+
+    Its own model, so `TicketState`'s shape can change without changing the API. The step, approval, decision and action
+    are still the workflow's and domain's models: a change to those changes the API too.
+    """
 
     ticket_id: str
     workflow_id: str
