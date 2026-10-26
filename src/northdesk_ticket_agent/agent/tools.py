@@ -1,4 +1,6 @@
 import json
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -63,32 +65,43 @@ class ToolExecutor:
     def __init__(self, store: DataStore, ticket: Ticket) -> None:
         self._store = store
         self._customer_id = ticket.customer_id
+        self._tools: dict[str, Callable[[dict[str, Any]], str]] = {
+            "get_customer": self._get_customer,
+            "get_invoices": self._get_invoices,
+            "search_kb": self._search_kb,
+        }
+
+    def knows(self, name: str) -> bool:
+        return name in self._tools
 
     def run(self, name: str, arguments: str) -> str:
+        tool = self._tools.get(name)
+        if tool is None:
+            return _error(f"unknown tool {name!r}")
         try:
             args = json.loads(arguments or "{}")
         except json.JSONDecodeError:
             return _error(f"arguments for {name} are not valid JSON")
         if not isinstance(args, dict):
             return _error(f"arguments for {name} must be a JSON object")
+        return tool(args)
 
-        match name:
-            case "get_customer":
-                customer = self._store.get_customer(self._customer_id)
-                if customer is None:
-                    return _error("customer not found")
-                return customer.model_dump_json()
-            case "get_invoices":
-                invoices = self._store.get_invoices(self._customer_id)
-                return json.dumps([inv.model_dump(mode="json") for inv in invoices])
-            case "search_kb":
-                query = args.get("query")
-                if not isinstance(query, str) or not query.strip():
-                    return _error("search_kb needs a non-empty 'query' string")
-                articles = self._store.search_kb(query)
-                return json.dumps([a.model_dump(mode="json") for a in articles])
-            case _:
-                return _error(f"unknown tool {name!r}")
+    def _get_customer(self, args: dict[str, Any]) -> str:
+        customer = self._store.get_customer(self._customer_id)
+        if customer is None:
+            return _error("customer not found")
+        return customer.model_dump_json()
+
+    def _get_invoices(self, args: dict[str, Any]) -> str:
+        invoices = self._store.get_invoices(self._customer_id)
+        return json.dumps([inv.model_dump(mode="json") for inv in invoices])
+
+    def _search_kb(self, args: dict[str, Any]) -> str:
+        query = args.get("query")
+        if not isinstance(query, str) or not query.strip():
+            return _error("search_kb needs a non-empty 'query' string")
+        articles = self._store.search_kb(query)
+        return json.dumps([a.model_dump(mode="json") for a in articles])
 
 
 def format_validation_error(exc: ValidationError) -> str:
