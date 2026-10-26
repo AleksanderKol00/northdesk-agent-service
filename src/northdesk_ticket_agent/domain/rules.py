@@ -49,10 +49,7 @@ def check_decision(
             else:
                 violations.append("escalate needs a reason")
         case ActionType.CLOSE:
-            if reason := _non_blank(proposed.reason):
-                action = CloseAction(reason=reason)
-            else:
-                violations.append("close needs a reason")
+            action = _check_close(proposed, category, violations)
 
     if violations or action is None or category is None or priority is None:
         return Decision(
@@ -78,6 +75,23 @@ def _check_reply(
     if violations or not message:
         return None
     return ReplyAction(message=message, article_ids=list(proposed.article_ids))
+
+
+def _check_close(
+    proposed: ProposedDecision,
+    category: Category | None,
+    violations: list[str],
+) -> CloseAction | None:
+    reason = _non_blank(proposed.reason)
+    if not reason:
+        violations.append("close needs a reason")
+    # Closing ends a ticket with nobody looking at it, so it is only for tickets that aren't about our product
+    # (spam, off-topic). A ticket can claim to be resolved; an account, billing or technical one goes to a person.
+    if category is not None and category != Category.OTHER:
+        violations.append(f"close is only for category {Category.OTHER}, not {category}")
+    if violations or not reason:
+        return None
+    return CloseAction(reason=reason)
 
 
 def _check_refund(
