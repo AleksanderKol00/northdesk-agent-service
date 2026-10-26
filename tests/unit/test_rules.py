@@ -34,7 +34,6 @@ def check(**fields: Any) -> Decision:
         ({"action": "refund", "invoice_id": "INV-1", "amount_eur": 49.0}, ActionType.REFUND),
         ({"action": "refund", "invoice_id": "INV-1", "amount_eur": 10.0}, ActionType.REFUND),
         ({"action": "escalate", "reason": "needs a human"}, ActionType.ESCALATE),
-        ({"action": "close", "reason": "spam"}, ActionType.CLOSE),
     ],
 )
 def test_valid_decisions_pass_unchanged(fields: dict[str, Any], expected_type: ActionType) -> None:
@@ -43,6 +42,13 @@ def test_valid_decisions_pass_unchanged(fields: dict[str, Any], expected_type: A
     assert decision.action.type == expected_type
     assert decision.category == Category.BILLING
     assert decision.priority == Priority.NORMAL
+
+
+def test_off_topic_ticket_can_be_closed() -> None:
+    decision = check(category="other", priority="low", action="close", reason="spam")
+    assert decision.violations == []
+    assert decision.action.type == ActionType.CLOSE
+    assert decision.category == Category.OTHER
 
 
 @pytest.mark.parametrize(
@@ -64,7 +70,10 @@ def test_valid_decisions_pass_unchanged(fields: dict[str, Any], expected_type: A
         ({"action": "refund", "invoice_id": "INV-404", "amount_eur": 10.0}, "does not belong"),
         ({"action": "refund", "invoice_id": "INV-1", "amount_eur": 5000.0}, "larger than invoice"),
         ({"action": "escalate"}, "escalate needs a reason"),
-        ({"action": "close", "reason": ""}, "close needs a reason"),
+        ({"category": "other", "action": "close", "reason": ""}, "close needs a reason"),
+        ({"category": "account", "action": "close", "reason": "resolved"}, "close is only for category other"),
+        ({"category": "billing", "action": "close", "reason": "resolved"}, "close is only for category other"),
+        ({"category": "technical", "action": "close", "reason": "resolved"}, "close is only for category other"),
     ],
 )
 def test_broken_rule_becomes_escalation(fields: dict[str, Any], violation: str) -> None:
