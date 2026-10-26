@@ -27,7 +27,8 @@ from northdesk_ticket_agent.orchestration.errors import (
     TicketNotFoundError,
     TicketWorkflowsUnavailableError,
 )
-from northdesk_ticket_agent.orchestration.workflow import Approval, TicketState, TicketWorkflow
+from northdesk_ticket_agent.orchestration.models import Approval, TicketState
+from northdesk_ticket_agent.orchestration.workflow import TicketWorkflow
 
 # How long a call waits for Temporal, and for the worker when it has to answer (a query, an update).
 RPC_TIMEOUT = timedelta(seconds=10)

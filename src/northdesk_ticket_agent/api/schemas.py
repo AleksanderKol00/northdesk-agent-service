@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from northdesk_ticket_agent.orchestration.workflow import TicketState
+from northdesk_ticket_agent.orchestration.models import TicketState
 
 
 class TicketStarted(BaseModel):

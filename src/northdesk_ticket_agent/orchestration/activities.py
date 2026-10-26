@@ -14,28 +14,24 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Any
 
-from pydantic import BaseModel
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from northdesk_ticket_agent.agent.agent import TicketAgent
 from northdesk_ticket_agent.agent.errors import AgentError
-from northdesk_ticket_agent.domain.models import Action, Decision, ProposedDecision, Ticket
+from northdesk_ticket_agent.domain.models import Decision, ProposedDecision, Ticket
 from northdesk_ticket_agent.domain.rules import check_decision
 from northdesk_ticket_agent.logs import log_context
+from northdesk_ticket_agent.orchestration.models import (
+    ACT_ACTIVITY,
+    CHECK_ACTIVITY,
+    DECIDE_ACTIVITY,
+    ActInput,
+    CheckInput,
+)
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.errors import ServiceError, TemporaryServiceError
 from northdesk_ticket_agent.services.helpdesk import Helpdesk, HelpdeskReceipt
-
-
-class CheckInput(BaseModel):
-    ticket: Ticket
-    proposed: ProposedDecision
-
-
-class ActInput(BaseModel):
-    ticket_id: str
-    action: Action
 
 
 class TicketActivities:
@@ -49,7 +45,7 @@ class TicketActivities:
     def all(self) -> list[Callable[..., Any]]:
         return [self.decide, self.check, self.act]
 
-    @activity.defn(name="ticket.decide")
+    @activity.defn(name=DECIDE_ACTIVITY)
     async def decide(self, ticket: Ticket) -> ProposedDecision:
         with _ticket_log_context(ticket.ticket_id):
             try:
@@ -62,7 +58,7 @@ class TicketActivities:
             activity.logger.info("Agent proposed a decision")
             return proposed
 
-    @activity.defn(name="ticket.check")
+    @activity.defn(name=CHECK_ACTIVITY)
     async def check(self, request: CheckInput) -> Decision:
         ticket = request.ticket
         with _ticket_log_context(ticket.ticket_id):
@@ -84,15 +80,13 @@ class TicketActivities:
                 activity.logger.info("Decision passed the checks: %s", decision.action.type, extra=fields)
             return decision
 
-    @activity.defn(name="ticket.act")
+    @activity.defn(name=ACT_ACTIVITY)
     async def act(self, request: ActInput) -> HelpdeskReceipt:
         # One key per ticket and action type: a retry after a lost response returns the first receipt instead of
-        # acting twice, and a different action of the same type on the same ticket is refused as a conflict. The fake
-        # Helpdesk keeps keys in memory, so this holds only while one worker process handles every retry (see README).
+        # acting twice. The fake Helpdesk keeps keys in memory, so run one worker (see worker.py).
         idempotency_key = f"{request.ticket_id}:{request.action.type}"
         with _ticket_log_context(request.ticket_id):
-            # The Helpdesk logs whether it acted or returned the first receipt for a repeated key; the workflow logs
-            # the outcome. A line here would claim the action was carried out again on every retry.
+            # No line here: the Helpdesk logs whether it acted or repeated a receipt, and the workflow logs the outcome.
             try:
                 return await self._helpdesk.perform(request.ticket_id, request.action, idempotency_key)
             except ServiceError as exc:

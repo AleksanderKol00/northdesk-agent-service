@@ -8,7 +8,7 @@ from northdesk_ticket_agent.domain.models import (
     RefundAction,
     Ticket,
 )
-from northdesk_ticket_agent.orchestration.workflow import Approval, Step
+from northdesk_ticket_agent.orchestration.models import Approval, Step
 from tests.fixtures.client import StubTicketWorkflows
 from tests.fixtures.logs import LogLines
 
