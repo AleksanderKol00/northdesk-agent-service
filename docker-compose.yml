@@ -61,6 +61,7 @@ services:
     image: jaegertracing/jaeger:2.22.0
     ports:
       - "16686:16686"
+      - "4318:4318"  # for an API or worker started with `uv run`
     restart: unless-stopped
 
 volumes:
