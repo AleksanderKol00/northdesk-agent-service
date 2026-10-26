@@ -89,6 +89,10 @@ FastAPI CLI's banner and uvicorn's first two lines, written before the app start
 - **The agent loop is one activity.** A temporary LLM error late in the loop retries `ticket.decide` from the first
   step, repeating the earlier LLM calls. Running each LLM call as its own activity would retry only the failed call.
 
+- **Closing a ticket still rests on the model's judgement.** A close is allowed only with category `other` (spam,
+  off-topic), so a model that files a ticket as billing and then closes it is sent to a person. Both fields come from
+  the model, though: a ticket that talks it into calling a real problem off-topic can still be closed unseen.
+
 ## Tests
 
 - `tests/unit/` — fast, isolated tests of single functions/classes; no I/O or app startup.
