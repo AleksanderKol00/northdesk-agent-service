@@ -19,6 +19,7 @@ from northdesk_ticket_agent.orchestration.client import connect
 from northdesk_ticket_agent.orchestration.workflow import TicketWorkflow
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.fake_helpdesk import FakeHelpdesk
+from northdesk_ticket_agent.tracing import WORKER_SERVICE, configure_tracing
 
 # How long a stopping worker lets running activities finish before cancelling them. Kept under Docker's default 10 s
 # stop timeout, so a `docker compose stop` ends in a clean shutdown and not a kill.
@@ -85,4 +86,9 @@ async def run_worker(settings: Settings) -> None:
 def main() -> None:
     settings = Settings()
     configure_worker_logging(settings.log_level)
-    asyncio.run(run_worker(settings))
+    tracing = configure_tracing(WORKER_SERVICE, settings.otel_exporter_otlp_endpoint)
+    try:
+        asyncio.run(run_worker(settings))
+    finally:
+        if tracing is not None:
+            tracing.shutdown()  # sends the spans still waiting in the batch

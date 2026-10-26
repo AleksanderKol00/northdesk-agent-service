@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 import temporalio.worker._activity as sdk_activity
+from opentelemetry import trace
 from temporalio import activity, workflow
 
 from northdesk_ticket_agent.logs import (
@@ -19,6 +20,7 @@ from northdesk_ticket_agent.logs import (
 )
 from northdesk_ticket_agent.orchestration.client import CORE_LOGGER, core_logging
 from northdesk_ticket_agent.orchestration.worker import configure_worker_logging
+from tests.fixtures.tracing import Spans
 
 logger = logging.getLogger("tests.logs")
 
@@ -188,3 +190,19 @@ def test_other_levels_apply_to_library_loggers_as_set() -> None:
     configure_logging("WARNING", io.StringIO())
 
     assert all(logging.getLogger(name).getEffectiveLevel() == logging.WARNING for name in LIBRARY_LOGGERS)
+
+
+def test_a_line_inside_a_span_carries_its_trace_and_span_ids(spans: Spans) -> None:
+    with trace.get_tracer(__name__).start_as_current_span("work") as span:
+        line = formatted(record())
+    context = span.get_span_context()
+
+    assert line["trace_id"] == f"{context.trace_id:032x}"
+    assert line["span_id"] == f"{context.span_id:016x}"
+
+
+def test_a_line_outside_a_span_has_no_trace_ids() -> None:
+    line = formatted(record())
+
+    assert "trace_id" not in line
+    assert "span_id" not in line
