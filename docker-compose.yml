@@ -1,6 +1,6 @@
-# The whole stack: Temporal (server + web UI), the API and the worker.
+# The whole stack: Temporal (server + web UI), the API, the worker and Jaeger for their traces.
 #   docker compose up --build
-# API: http://localhost:8000 (docs at /docs) · Temporal UI: http://localhost:8233
+# API: http://localhost:8000 (docs at /docs) · Temporal UI: http://localhost:8233 · Jaeger UI: http://localhost:16686
 name: northdesk
 
 # Shared by the API and the worker: one image, settings from .env (optional; defaults work with LLM_MODE=fake).
@@ -12,6 +12,7 @@ x-app: &app
       required: false
   environment:
     TEMPORAL_ADDRESS: temporal:7233
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
   depends_on:
     temporal:
       condition: service_healthy
@@ -53,6 +54,14 @@ services:
   worker:
     <<: *app
     command: [northdesk-worker]
+
+  # Collects the API's and the worker's traces over OTLP/HTTP (4318) and shows them in its UI on 16686. Traces are
+  # kept in memory, so a restart drops them. Not a dependency: if it is down, the spans are dropped and tickets go on.
+  jaeger:
+    image: jaegertracing/jaeger:2.22.0
+    ports:
+      - "16686:16686"
+    restart: unless-stopped
 
 volumes:
   temporal-data:
