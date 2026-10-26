@@ -13,8 +13,9 @@ from northdesk_ticket_agent.orchestration.client import connect
 from northdesk_ticket_agent.orchestration.tickets import TemporalTicketWorkflows, TicketWorkflows
 from northdesk_ticket_agent.tracing import API_SERVICE, configure_tracing
 
-# Docker's health check calls this every few seconds; a trace for each would bury the tickets'.
-UNTRACED_URLS = "/health$"
+# Docker's health check calls this every few seconds; a trace for each would bury the tickets'. Matched against the
+# whole URL (scheme, host and path, no query), so anchored: `/tickets/health` is a ticket.
+UNTRACED_URLS = r"^https?://[^/]+/health$"
 
 
 def create_app(workflows: TicketWorkflows | None = None) -> FastAPI:
