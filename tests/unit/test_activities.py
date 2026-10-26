@@ -147,6 +147,22 @@ async def test_check_accepts_a_valid_refund(datastore: DataStore, example_ticket
     assert decision.violations == []
 
 
+async def test_check_fails_at_once_on_an_unexpected_error(
+    datastore: DataStore, example_tickets: dict[str, Ticket], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken_check(*args: object, **kwargs: object) -> None:
+        raise ArithmeticError("49.99 from the model")
+
+    monkeypatch.setattr("northdesk_ticket_agent.orchestration.activities.check_decision", broken_check)
+    proposed = ProposedDecision(category="billing", priority="normal", action="reply", message="Hi")
+
+    error = await run_failing(activities(datastore).check, CheckInput(ticket=example_tickets["T-2"], proposed=proposed))
+
+    assert error.type == "ArithmeticError"
+    assert error.non_retryable
+    assert "49.99" not in error.message
+
+
 async def test_check_uses_the_tickets_customer_for_ownership(
     datastore: DataStore, example_tickets: dict[str, Ticket]
 ) -> None:
