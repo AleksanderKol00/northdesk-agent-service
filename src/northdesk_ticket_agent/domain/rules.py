@@ -6,6 +6,7 @@ known articles) come from our own data, never from the model or the ticket text.
 """
 
 import math
+import re
 from collections.abc import Collection, Iterable
 
 from northdesk_ticket_agent.domain.models import (
@@ -21,6 +22,12 @@ from northdesk_ticket_agent.domain.models import (
     RefundAction,
     ReplyAction,
     Ticket,
+)
+
+# Words that make a ticket about money. A close of such a ticket goes to a person, whatever category the model chose.
+_MONEY_WORDS = re.compile(
+    r"\b(?:refund\w*|charge[ds]?|invoices?|pay|paid|payments?|billing|billed|money|eur|euros?)\b|€",
+    re.IGNORECASE,
 )
 
 
@@ -49,7 +56,7 @@ def check_decision(
             else:
                 violations.append("escalate needs a reason")
         case ActionType.CLOSE:
-            action = _check_close(proposed, category, violations)
+            action = _check_close(proposed, ticket, category, violations)
 
     if violations or action is None or category is None or priority is None:
         return Decision(
@@ -79,6 +86,7 @@ def _check_reply(
 
 def _check_close(
     proposed: ProposedDecision,
+    ticket: Ticket,
     category: Category | None,
     violations: list[str],
 ) -> CloseAction | None:
@@ -88,9 +96,13 @@ def _check_close(
     # Closing ends a ticket with nobody looking at it, so it is only for tickets that aren't about our product
     # (spam, off-topic): a model that files a ticket as account, billing or technical and then closes it (say, because
     # the ticket claims to be resolved) is sent to a person. Both fields are the model's, so this catches an
-    # inconsistent decision, not a model talked into calling a real problem off-topic.
+    # inconsistent decision. A model can still be talked into calling a real problem off-topic, so a ticket that talks
+    # about money (a refund demand dressed up as spam, or a real billing problem) is never closed unseen either. This
+    # reads the ticket's own words, not the model's, and errs towards a person.
     if category is not None and category != Category.OTHER:
         violations.append(f"close is only for category {Category.OTHER}, not {category}")
+    if _MONEY_WORDS.search(f"{ticket.subject}\n{ticket.body}"):
+        violations.append("close is not allowed for a ticket about money")
     if violations or not reason:
         return None
     return CloseAction(reason=reason)

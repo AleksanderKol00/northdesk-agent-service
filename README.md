@@ -257,8 +257,9 @@ does not rely on the model resisting:
   happens, and the workflow is the only path to the Helpdesk. The model has no tool that acts.
 - **The checks use facts, not the model's word.** Category, priority and action must be allowed values. A refund must
   name a `paid` invoice that belongs to the ticket's customer (taken from the ticket, never from the model), for a
-  finite amount above 0 and no larger than the invoice. Closing is allowed only for category `other`. Any violation
-  turns the decision into an escalation.
+  finite amount above 0 and no larger than the invoice. Closing is allowed only for category `other`, and never for
+  a ticket whose subject or body talks about money (refund, invoice, charge, payment, EUR and the like), whatever
+  category the model gave it. Any violation turns the decision into an escalation.
 - **Refunds always need a person**, whatever the ticket says about approval.
 - **Lookups are fixed to the ticket's customer.** `get_customer` and `get_invoices` take no arguments, so a ticket
   cannot make the model read another customer's data.
@@ -333,7 +334,8 @@ Things it got wrong, and how they were caught:
 **Assumptions**
 
 - A refund can be issued only for a `paid` invoice (not an overdue one), and only up to its amount.
-- Replies go out without a person reading them; only refunds need approval. Closing is limited to category `other`.
+- Replies go out without a person reading them; only refunds need approval. Closing is limited to category `other`
+  and to tickets that don't talk about money.
 - A ticket gets one action. An unknown customer is escalated, not rejected at the API.
 - Ticket IDs are 1–64 characters of `A–Z a–z 0–9 _ . -`, since they are also workflow IDs and URL segments.
 - The Helpdesk is a class inside the worker; a real one would be an HTTP service with the same interface.
@@ -349,8 +351,9 @@ Things it got wrong, and how they were caught:
 - **Duplicates are caught while Temporal keeps the workflow** (the namespace's retention period). A ticket sent again
   with new content returns the old workflow.
 - **The agent loop is one activity**, so a temporary LLM error late in the loop repeats the earlier LLM calls.
-- **Closing still rests on the model's judgement.** A ticket that talks the model into calling a real problem
-  off-topic can be closed unseen.
+- **Closing still rests partly on the model's judgement.** A ticket that talks the model into calling a real problem
+  off-topic, without any of the money words, can be closed unseen. The word list is coarse on purpose: a false match
+  only sends an off-topic ticket to a person.
 - **Reading a ticket needs a running worker**, since the state comes from a workflow query.
 - **The first test run needs network**, unless `TEMPORAL_TEST_SERVER_PATH` points at Temporal's test server binary
   (see [Tests](#tests)). CI downloads it on every run.
