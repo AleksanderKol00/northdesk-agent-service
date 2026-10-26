@@ -71,7 +71,10 @@ def test_off_topic_ticket_can_be_closed() -> None:
         ({"action": "refund", "invoice_id": "INV-4", "amount_eur": 10.0}, "is overdue"),
         ({"action": "refund", "invoice_id": "INV-9", "amount_eur": 10.0}, "does not belong"),
         ({"action": "refund", "invoice_id": "INV-404", "amount_eur": 10.0}, "does not belong"),
-        ({"action": "refund", "invoice_id": "INV-1", "amount_eur": 5000.0}, "larger than invoice"),
+        (
+            {"action": "refund", "invoice_id": "INV-1", "amount_eur": 5000.0},
+            "refund 5000.00 EUR is larger than invoice INV-1 (49.00 EUR)",
+        ),
         ({"action": "refund", "invoice_id": "INV-1", "amount_eur": 1e26}, "larger than invoice"),
         ({"action": "refund", "invoice_id": "INV-1", "amount_eur": 1e300}, "larger than invoice"),
         ({"action": "escalate"}, "escalate needs a reason"),
@@ -148,5 +151,5 @@ def test_every_broken_rule_is_reported() -> None:
     assert decision.violations == [
         "category 'sales' is not allowed (allowed: account, billing, technical, other)",
         "invoice INV-4 is overdue, only paid invoices",
-        "refund 500.0 EUR is larger than invoice INV-4 (49.0 EUR)",
+        "refund 500.00 EUR is larger than invoice INV-4 (49.00 EUR)",
     ]
