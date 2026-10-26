@@ -10,8 +10,8 @@ from northdesk_ticket_agent.orchestration.errors import (
     TicketNotFoundError,
     TicketWorkflowsUnavailableError,
 )
+from northdesk_ticket_agent.orchestration.models import Approval, Step, TicketState
 from northdesk_ticket_agent.orchestration.tickets import StartedTicket
-from northdesk_ticket_agent.orchestration.workflow import Approval, Step, TicketState
 
 
 class StubTicketWorkflows:

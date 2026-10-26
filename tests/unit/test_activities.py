@@ -18,7 +18,8 @@ from northdesk_ticket_agent.domain.models import (
     RefundAction,
     Ticket,
 )
-from northdesk_ticket_agent.orchestration.activities import ActInput, CheckInput, TicketActivities
+from northdesk_ticket_agent.orchestration.activities import TicketActivities
+from northdesk_ticket_agent.orchestration.models import ActInput, CheckInput
 from northdesk_ticket_agent.orchestration.worker import STOP_SIGNALS, build_activities, stop_on_signals
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.fake_helpdesk import FakeHelpdesk

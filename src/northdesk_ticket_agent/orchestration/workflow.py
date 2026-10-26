@@ -14,9 +14,7 @@ logs turn into its `workflow_id` and `ticket_id`.
 
 from contextlib import suppress
 from datetime import timedelta
-from enum import StrEnum
 
-from pydantic import BaseModel
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError
@@ -30,7 +28,16 @@ with workflow.unsafe.imports_passed_through():
         RefundAction,
         Ticket,
     )
-    from northdesk_ticket_agent.orchestration.activities import ActInput, CheckInput
+    from northdesk_ticket_agent.orchestration.models import (
+        ACT_ACTIVITY,
+        CHECK_ACTIVITY,
+        DECIDE_ACTIVITY,
+        ActInput,
+        Approval,
+        CheckInput,
+        Step,
+        TicketState,
+    )
     from northdesk_ticket_agent.services.helpdesk import HelpdeskReceipt
 
 APPROVAL_TIMEOUT = timedelta(hours=24)
@@ -58,36 +65,6 @@ ACT_RETRY = RetryPolicy(
 )
 
 
-class Step(StrEnum):
-    DECIDING = "deciding"
-    CHECKING = "checking"
-    AWAITING_APPROVAL = "awaiting_approval"
-    ACTING = "acting"
-    DONE = "done"
-    FAILED = "failed"
-
-
-class Approval(BaseModel):
-    approved: bool
-    comment: str | None = None
-
-
-class TicketState(BaseModel):
-    """Where a ticket is, and what was decided and done. Returned by the `status` query and as the workflow result.
-
-    `decision` is the checked decision (None when the agent could not decide). `action` is what is carried out; it
-    differs from `decision.action` when a refund is rejected or not answered in time, or when deciding failed.
-    """
-
-    ticket_id: str
-    step: Step = Step.DECIDING
-    decision: Decision | None = None
-    approval: Approval | None = None
-    action: Action | None = None
-    receipt: HelpdeskReceipt | None = None
-    error: str | None = None
-
-
 @workflow.defn
 class TicketWorkflow:
     @workflow.init
@@ -102,7 +79,7 @@ class TicketWorkflow:
 
         try:
             proposed = await workflow.execute_activity(
-                "ticket.decide",
+                DECIDE_ACTIVITY,
                 ticket,
                 result_type=ProposedDecision,
                 start_to_close_timeout=DECIDE_TIMEOUT,
@@ -110,7 +87,7 @@ class TicketWorkflow:
             )
             state.step = Step.CHECKING
             state.decision = await workflow.execute_activity(
-                "ticket.check",
+                CHECK_ACTIVITY,
                 CheckInput(ticket=ticket, proposed=proposed),
                 result_type=Decision,
                 start_to_close_timeout=CHECK_TIMEOUT,
@@ -128,7 +105,7 @@ class TicketWorkflow:
         state.step = Step.ACTING
         try:
             state.receipt = await workflow.execute_activity(
-                "ticket.act",
+                ACT_ACTIVITY,
                 ActInput(ticket_id=ticket.ticket_id, action=state.action),
                 result_type=HelpdeskReceipt,
                 start_to_close_timeout=ACT_TIMEOUT,

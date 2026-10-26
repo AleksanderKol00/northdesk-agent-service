@@ -7,7 +7,7 @@ from northdesk_ticket_agent.api.dependencies import TicketId, Workflows
 from northdesk_ticket_agent.api.schemas import TicketStarted, TicketStatus
 from northdesk_ticket_agent.domain.models import Ticket
 from northdesk_ticket_agent.logs import bind_log_context
-from northdesk_ticket_agent.orchestration.workflow import Approval
+from northdesk_ticket_agent.orchestration.models import Approval
 
 logger = logging.getLogger(__name__)
 

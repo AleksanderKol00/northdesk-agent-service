@@ -22,8 +22,9 @@ from northdesk_ticket_agent.orchestration.errors import (
     TicketNotFoundError,
     TicketWorkflowsUnavailableError,
 )
+from northdesk_ticket_agent.orchestration.models import DECIDE_ACTIVITY, Approval, Step, TicketState
 from northdesk_ticket_agent.orchestration.tickets import ANSWER_MAY_BE_RECORDED, StartedTicket, TemporalTicketWorkflows
-from northdesk_ticket_agent.orchestration.workflow import Approval, Step, TicketState, TicketWorkflow
+from northdesk_ticket_agent.orchestration.workflow import TicketWorkflow
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.fake_helpdesk import FakeHelpdesk
 from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
@@ -108,7 +109,7 @@ async def test_nothing_to_approve_while_deciding(
     real = TicketActivities(TicketAgent(FakeLLMClient(), datastore), datastore, helpdesk)
     release = asyncio.Event()
 
-    @activity.defn(name="ticket.decide")
+    @activity.defn(name=DECIDE_ACTIVITY)
     async def held_decide(ticket: Ticket) -> ProposedDecision:
         await release.wait()
         return await real.decide(ticket)
@@ -272,7 +273,7 @@ async def test_a_failed_activity_is_logged_with_the_ticket(
 
     lines = json_logs.about(ticket.ticket_id)
     [failed] = [line for line in lines if line["message"] == "Completing activity as failed"]  # the SDK's own line
-    assert failed["temporal_activity"]["activity_type"] == "ticket.decide"
+    assert failed["temporal_activity"]["activity_type"] == DECIDE_ACTIVITY
     assert "UnknownCustomerError" in failed["exception"]
     [escalated] = [line for line in lines if line["message"] == "Could not decide automatically; escalating"]
     assert escalated["level"] == "WARNING"

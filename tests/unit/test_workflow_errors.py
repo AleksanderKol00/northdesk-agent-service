@@ -2,8 +2,8 @@ import pytest
 from temporalio.exceptions import ActivityError, ApplicationError, TimeoutError, TimeoutType
 
 from northdesk_ticket_agent.domain.models import EscalateAction, RefundAction, ReplyAction
+from northdesk_ticket_agent.orchestration.models import ACT_ACTIVITY, Approval
 from northdesk_ticket_agent.orchestration.workflow import (
-    Approval,
     _action_failure,
     _approval_outcome,
     _describe,
@@ -17,7 +17,7 @@ def activity_error(cause: BaseException | None) -> ActivityError:
         scheduled_event_id=1,
         started_event_id=2,
         identity="worker",
-        activity_type="ticket.act",
+        activity_type=ACT_ACTIVITY,
         activity_id="1",
         retry_state=None,
     )

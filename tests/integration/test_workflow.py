@@ -23,15 +23,18 @@ from northdesk_ticket_agent.domain.models import (
     Ticket,
 )
 from northdesk_ticket_agent.domain.rules import check_decision
-from northdesk_ticket_agent.orchestration.activities import ActInput, CheckInput, TicketActivities
-from northdesk_ticket_agent.orchestration.workflow import (
-    ACT_RETRY,
-    DECIDE_RETRY,
+from northdesk_ticket_agent.orchestration.activities import TicketActivities
+from northdesk_ticket_agent.orchestration.models import (
+    ACT_ACTIVITY,
+    CHECK_ACTIVITY,
+    DECIDE_ACTIVITY,
+    ActInput,
     Approval,
+    CheckInput,
     Step,
     TicketState,
-    TicketWorkflow,
 )
+from northdesk_ticket_agent.orchestration.workflow import ACT_RETRY, DECIDE_RETRY, TicketWorkflow
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.fake_helpdesk import FakeHelpdesk
 from northdesk_ticket_agent.services.helpdesk import HelpdeskReceipt
@@ -77,20 +80,20 @@ class FakeActivities:
     def all(self) -> list[Callable[..., Any]]:
         return [self.decide, self.check, self.act]
 
-    @activity.defn(name="ticket.decide")
+    @activity.defn(name=DECIDE_ACTIVITY)
     async def decide(self, ticket: Ticket) -> ProposedDecision:
         self.decide_attempts += 1
         if self._decide_errors:
             raise self._decide_errors.pop(0)
         return self._proposed
 
-    @activity.defn(name="ticket.check")
+    @activity.defn(name=CHECK_ACTIVITY)
     async def check(self, request: CheckInput) -> Decision:
         store = self._datastore
         invoices = store.get_invoices(request.ticket.customer_id)
         return check_decision(request.proposed, request.ticket, invoices, store.article_ids())
 
-    @activity.defn(name="ticket.act")
+    @activity.defn(name=ACT_ACTIVITY)
     async def act(self, request: ActInput) -> HelpdeskReceipt:
         self.act_attempts += 1
         if self._act_errors:
