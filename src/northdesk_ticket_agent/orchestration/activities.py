@@ -21,7 +21,7 @@ from temporalio.exceptions import ApplicationError
 
 from northdesk_ticket_agent.agent.agent import TicketAgent
 from northdesk_ticket_agent.agent.errors import AgentError
-from northdesk_ticket_agent.domain.models import Decision, ProposedDecision, Ticket
+from northdesk_ticket_agent.domain.models import ActionType, Decision, ProposedDecision, Ticket
 from northdesk_ticket_agent.domain.rules import check_decision
 from northdesk_ticket_agent.logs import log_context
 from northdesk_ticket_agent.orchestration.models import (
@@ -79,9 +79,15 @@ class TicketActivities:
                 ) from None
             fields = {"action": decision.action.type, "category": decision.category, "priority": decision.priority}
             # Checked values, so they can go on the activity's span: a trace search can then find, say, the refunds.
+            # The proposed action too, which finds the refunds the rules turned into escalations; it is the model's
+            # string, so only an action we know goes on the span.
+            proposed = request.proposed.action
             trace.get_current_span().set_attributes(
                 {f"ticket.{key}": str(value) for key, value in fields.items()}
-                | {"ticket.violations": len(decision.violations)}
+                | {
+                    "ticket.proposed_action": proposed if proposed in ActionType else "unknown",
+                    "ticket.violations": len(decision.violations),
+                }
             )
             if decision.violations:
                 # The count only: the violations quote the model's values, which may repeat the ticket's text.

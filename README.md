@@ -338,7 +338,8 @@ northdesk-worker      RunActivity:ticket.act           1 ms
   API and the worker share, carries the trace into the workflow through its headers, and from there to each activity.
 - The agent adds a span per model call (`chat`) and per tool it runs (`execute_tool <name>`), named after
   OpenTelemetry's GenAI conventions. `ticket.check` puts the checked decision on its span, so a search for
-  `ticket.action=refund` finds the refunds.
+  `ticket.action=refund` finds the refunds, and the model's proposed action next to it, so
+  `ticket.proposed_action=refund ticket.action=escalate` finds the refunds the rules turned down.
 - An approval is a request of its own, with a trace of its own. The workflow handles it inside the ticket's trace,
   linked to the approval's.
 - The workflow's spans last no time: the interceptor ends them at once, since a workflow can wait for days and be

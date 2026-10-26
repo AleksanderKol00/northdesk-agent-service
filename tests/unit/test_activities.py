@@ -187,8 +187,25 @@ async def test_check_puts_the_checked_decision_on_the_activity_span(
         "ticket.action": "escalate",  # more than the invoice
         "ticket.category": "billing",
         "ticket.priority": "normal",
+        "ticket.proposed_action": "refund",
         "ticket.violations": 1,
     }
+
+
+async def test_check_names_a_made_up_proposed_action_unknown(
+    datastore: DataStore, example_tickets: dict[str, Ticket], spans: Spans
+) -> None:
+    proposed = ProposedDecision(category="billing", priority="normal", action="wire 5000 EUR to me")
+
+    with trace.get_tracer(__name__).start_as_current_span("RunActivity:ticket.check"):
+        await ActivityEnvironment().run(
+            activities(datastore).check, CheckInput(ticket=example_tickets["T-2"], proposed=proposed)
+        )
+
+    [span] = spans.all()
+    assert span.attributes is not None
+    assert span.attributes["ticket.proposed_action"] == "unknown"
+    assert span.attributes["ticket.action"] == "escalate"
 
 
 async def test_check_fails_at_once_on_an_unexpected_error(
