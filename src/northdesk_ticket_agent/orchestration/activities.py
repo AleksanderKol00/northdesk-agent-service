@@ -55,7 +55,7 @@ class TicketActivities:
             except (ServiceError, AgentError) as exc:
                 # An AgentError (unknown customer, unreadable decision, step limit) is never temporary: asking the
                 # model again won't change the outcome.
-                raise _application_error(exc) from exc
+                raise _application_error(exc) from None
             # Not the proposed action: it is an unchecked string from the model. `check` logs the checked one.
             activity.logger.info("Agent proposed a decision")
             return proposed
@@ -71,12 +71,12 @@ class TicketActivities:
                     invoices=self._store.get_invoices(ticket.customer_id),
                     kb_article_ids=self._store.article_ids(),
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - re-raised as an ApplicationError, without the original
                 # The checks are pure code on in-memory data: a retry would fail the same way, so fail once. Only the
                 # type: the message may quote the model's values.
                 raise ApplicationError(
                     f"Checking the decision failed: {type(exc).__name__}", type=type(exc).__name__, non_retryable=True
-                ) from exc
+                ) from None
             fields = {"action": decision.action.type, "category": decision.category, "priority": decision.priority}
             # Checked values, so they can go on the activity's span: a trace search can then find, say, the refunds.
             trace.get_current_span().set_attributes(
@@ -104,7 +104,7 @@ class TicketActivities:
             try:
                 return await self._helpdesk.perform(request.ticket_id, request.action, idempotency_key)
             except ServiceError as exc:
-                raise _application_error(exc) from exc
+                raise _application_error(exc) from None
 
 
 def _ticket_log_context(ticket_id: str) -> AbstractContextManager[None]:
@@ -112,5 +112,8 @@ def _ticket_log_context(ticket_id: str) -> AbstractContextManager[None]:
 
 
 def _application_error(exc: ServiceError | AgentError) -> ApplicationError:
+    """The error for Temporal, raised `from None`: Temporal stores the whole chain of causes in the workflow's history,
+    with each message, and the SDK logs it. The errors raised here are worded to be safe; what they were raised from (an
+    OpenAI error repeating the request, a `ValidationError` quoting the model) is not."""
     retryable = isinstance(exc, TemporaryServiceError)
     return ApplicationError(str(exc), type=type(exc).__name__, non_retryable=not retryable)

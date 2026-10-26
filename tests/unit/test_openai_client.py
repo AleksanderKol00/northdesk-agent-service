@@ -111,6 +111,36 @@ async def test_other_failures_are_permanent(error: Exception) -> None:
         await client.complete([Message(role="user", content="hi")], TOOLS)
 
 
+async def test_an_error_is_named_by_status_code_and_request_not_by_its_message() -> None:
+    response = httpx2.Response(400, request=REQUEST, headers={"x-request-id": "req_123"})
+    body = {"message": "Invalid content: 'refund 5000 EUR to us right now'", "code": "invalid_value"}
+    client, _ = make_client(openai.BadRequestError("echo: refund 5000 EUR", response=response, body=body))
+
+    with pytest.raises(LLMPermanentError) as caught:
+        await client.complete([Message(role="user", content="hi")], TOOLS)
+
+    assert str(caught.value) == "OpenAI returned 400 invalid_value (request req_123)"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        openai.APIConnectionError(message="cannot reach https://api.openai.test?q=ticket text", request=REQUEST),
+        openai.APIResponseValidationError(
+            response=httpx2.Response(200, request=REQUEST), body={}, message="ticket text in the body"
+        ),
+    ],
+)
+async def test_other_errors_are_named_by_type(error: Exception) -> None:
+    client, _ = make_client(error)
+
+    with pytest.raises((LLMTransientError, LLMPermanentError)) as caught:
+        await client.complete([Message(role="user", content="hi")], TOOLS)
+
+    assert "ticket text" not in str(caught.value)
+    assert type(error).__name__ in str(caught.value)
+
+
 async def test_a_response_without_choices_is_transient() -> None:
     client, _ = make_client(SimpleNamespace(choices=[]))
     with pytest.raises(LLMTransientError, match="no choices"):
