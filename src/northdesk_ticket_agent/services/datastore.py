@@ -3,7 +3,7 @@ import re
 from importlib import resources
 from typing import Any
 
-from northdesk_ticket_agent.domain.models import Customer, Invoice, KbArticle, Ticket
+from northdesk_ticket_agent.domain.models import Customer, Invoice, KbArticle
 
 _WORD = re.compile(r"[a-z0-9]+")
 _STOPWORDS = frozenset(
@@ -59,10 +59,6 @@ class DataStore:
                 scored.append((score, article))
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [article for _, article in scored[:limit]]
-
-
-def load_example_tickets() -> list[Ticket]:
-    return [Ticket(**row) for row in _load("tickets.json")]
 
 
 def _load(name: str) -> list[dict[str, Any]]:
