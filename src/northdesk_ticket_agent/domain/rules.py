@@ -8,6 +8,7 @@ known articles) come from our own data, never from the model or the ticket text.
 import math
 import re
 from collections.abc import Collection, Iterable
+from decimal import Decimal
 
 from northdesk_ticket_agent.domain.models import (
     Action,
@@ -29,6 +30,7 @@ _MONEY_WORDS = re.compile(
     r"\b(?:refund\w*|charge[ds]?|invoices?|pay|paid|payments?|billing|billed|money|eur|euros?)\b|€",
     re.IGNORECASE,
 )
+_CENT = Decimal("0.01")
 
 
 def check_decision(
@@ -37,28 +39,27 @@ def check_decision(
     invoices: Iterable[Invoice],
     kb_article_ids: Collection[str],
 ) -> Decision:
-    """Validate a proposed decision; any broken rule turns it into an escalation."""
+    """Validate a proposed decision; any broken rule turns it into an escalation that lists every broken rule."""
     violations: list[str] = []
-
     category = _parse_enum(Category, proposed.category, "category", violations)
     priority = _parse_enum(Priority, proposed.priority, "priority", violations)
     action_type = _parse_enum(ActionType, proposed.action, "action", violations)
 
-    action: Action | None = None
+    # Each check returns the action, or the rules it breaks.
+    action: Action | list[str] = []
     match action_type:
         case ActionType.REPLY:
-            action = _check_reply(proposed, kb_article_ids, violations)
+            action = _check_reply(proposed, kb_article_ids)
         case ActionType.REFUND:
-            action = _check_refund(proposed, ticket, invoices, violations)
+            action = _check_refund(proposed, ticket.customer_id, invoices)
         case ActionType.ESCALATE:
-            if reason := _non_blank(proposed.reason):
-                action = EscalateAction(reason=reason)
-            else:
-                violations.append("escalate needs a reason")
+            action = _check_escalate(proposed)
         case ActionType.CLOSE:
-            action = _check_close(proposed, ticket, category, violations)
+            action = _check_close(proposed, ticket, category)
+    if isinstance(action, list):
+        violations += action
 
-    if violations or action is None or category is None or priority is None:
+    if violations or isinstance(action, list) or category is None or priority is None:
         return Decision(
             category=category or Category.OTHER,
             priority=priority or Priority.NORMAL,
@@ -68,78 +69,72 @@ def check_decision(
     return Decision(category=category, priority=priority, action=action)
 
 
-def _check_reply(
-    proposed: ProposedDecision,
-    kb_article_ids: Collection[str],
-    violations: list[str],
-) -> ReplyAction | None:
+def _check_reply(proposed: ProposedDecision, kb_article_ids: Collection[str]) -> ReplyAction | list[str]:
+    violations = []
     message = _non_blank(proposed.message)
-    if not message:
+    if message is None:
         violations.append("reply needs a message")
     unknown = [a for a in proposed.article_ids if a not in kb_article_ids]
     if unknown:
         violations.append(f"reply cites unknown articles: {', '.join(unknown)}")
-    if violations or not message:
-        return None
+    if violations or message is None:
+        return violations
     return ReplyAction(message=message, article_ids=list(proposed.article_ids))
 
 
-def _check_close(
-    proposed: ProposedDecision,
-    ticket: Ticket,
-    category: Category | None,
-    violations: list[str],
-) -> CloseAction | None:
+def _check_refund(
+    proposed: ProposedDecision, customer_id: str, invoices: Iterable[Invoice]
+) -> RefundAction | list[str]:
+    violations = []
+    amount = _to_money(proposed.amount_eur)
+    if amount is None:
+        violations.append("refund needs an amount greater than 0, in whole cents")
+    invoice_id = proposed.invoice_id
+    if not invoice_id:
+        violations.append("refund needs an invoice")
+    else:
+        # Ownership is checked against the ticket's customer, never a customer the model names.
+        invoice = next((i for i in invoices if i.invoice_id == invoice_id and i.customer_id == customer_id), None)
+        if invoice is None:
+            violations.append(f"invoice {invoice_id} does not belong to customer {customer_id}")
+        else:
+            if invoice.status != "paid":
+                violations.append(f"invoice {invoice_id} is {invoice.status}, only paid invoices")
+            if amount is not None and amount > invoice.amount_eur:
+                violations.append(f"refund {amount} EUR is larger than invoice {invoice_id} ({invoice.amount_eur} EUR)")
+    if violations or not invoice_id or amount is None:
+        return violations
+    return RefundAction(invoice_id=invoice_id, amount_eur=amount)
+
+
+def _check_escalate(proposed: ProposedDecision) -> EscalateAction | list[str]:
     reason = _non_blank(proposed.reason)
-    if not reason:
+    return EscalateAction(reason=reason) if reason else ["escalate needs a reason"]
+
+
+def _check_close(proposed: ProposedDecision, ticket: Ticket, category: Category | None) -> CloseAction | list[str]:
+    violations = []
+    reason = _non_blank(proposed.reason)
+    if reason is None:
         violations.append("close needs a reason")
-    # Closing ends a ticket with nobody looking at it, so it is only for tickets that aren't about our product
-    # (spam, off-topic): a model that files a ticket as account, billing or technical and then closes it (say, because
-    # the ticket claims to be resolved) is sent to a person. Both fields are the model's, so this catches an
-    # inconsistent decision. A model can still be talked into calling a real problem off-topic, so a ticket that talks
-    # about money (a refund demand dressed up as spam, or a real billing problem) is never closed unseen either. This
-    # reads the ticket's own words, not the model's, and errs towards a person.
+    # Closing ends a ticket unseen, so it is only for tickets not about our product (spam, off-topic). The category is
+    # the model's own, so this catches an inconsistent decision. The money words are the ticket's, so a refund demand
+    # the model was talked into calling spam still reaches a person.
     if category is not None and category != Category.OTHER:
         violations.append(f"close is only for category {Category.OTHER}, not {category}")
     if _MONEY_WORDS.search(f"{ticket.subject}\n{ticket.body}"):
         violations.append("close is not allowed for a ticket about money")
-    if violations or not reason:
-        return None
+    if violations or reason is None:
+        return violations
     return CloseAction(reason=reason)
 
 
-def _check_refund(
-    proposed: ProposedDecision,
-    ticket: Ticket,
-    invoices: Iterable[Invoice],
-    violations: list[str],
-) -> RefundAction | None:
-    invoice_id = proposed.invoice_id
-    if not invoice_id:
-        violations.append("refund needs an invoice")
-    amount = proposed.amount_eur
-    if amount is None or not math.isfinite(amount) or amount <= 0:
-        violations.append("refund needs an amount greater than 0")
-    if violations or not invoice_id or amount is None:
+def _to_money(value: float | None) -> Decimal | None:
+    """The amount in exact euros, or None unless it is finite, greater than 0 and in whole cents."""
+    if value is None or not math.isfinite(value) or value <= 0:
         return None
-
-    # Ownership is checked against the ticket's customer, never a customer the model names.
-    invoice = next(
-        (inv for inv in invoices if inv.invoice_id == invoice_id and inv.customer_id == ticket.customer_id),
-        None,
-    )
-    if invoice is None:
-        violations.append(f"invoice {invoice_id} does not belong to customer {ticket.customer_id}")
-        return None
-    if invoice.status != "paid":
-        violations.append(f"invoice {invoice.invoice_id} is {invoice.status}, only paid invoices")
-        return None
-    if amount > invoice.amount_eur:
-        violations.append(
-            f"refund {amount:.2f} EUR is larger than invoice {invoice.invoice_id} ({invoice.amount_eur:.2f} EUR)"
-        )
-        return None
-    return RefundAction(invoice_id=invoice.invoice_id, amount_eur=amount)
+    amount = Decimal(str(value))  # str: the shortest decimal for the float (49.99), not its binary expansion
+    return amount if amount == amount.quantize(_CENT) else None
 
 
 def _parse_enum[E: (Category, Priority, ActionType)](

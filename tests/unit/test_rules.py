@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -9,15 +10,16 @@ from northdesk_ticket_agent.domain.models import (
     Invoice,
     Priority,
     ProposedDecision,
+    RefundAction,
     Ticket,
 )
 from northdesk_ticket_agent.domain.rules import check_decision
 
 TICKET = Ticket(ticket_id="T-X", customer_id="C-100", subject="s", body="b")
 INVOICES = [
-    Invoice(invoice_id="INV-1", customer_id="C-100", month="2026-09", amount_eur=49.0, status="paid"),
-    Invoice(invoice_id="INV-9", customer_id="C-900", month="2026-09", amount_eur=990.0, status="paid"),
-    Invoice(invoice_id="INV-4", customer_id="C-100", month="2026-08", amount_eur=49.0, status="overdue"),
+    Invoice(invoice_id="INV-1", customer_id="C-100", month="2026-09", amount_eur=Decimal("49.0"), status="paid"),
+    Invoice(invoice_id="INV-9", customer_id="C-900", month="2026-09", amount_eur=Decimal("990.0"), status="paid"),
+    Invoice(invoice_id="INV-4", customer_id="C-100", month="2026-08", amount_eur=Decimal("49.0"), status="overdue"),
 ]
 KB_IDS = {"KB-1", "KB-2"}
 
@@ -65,6 +67,7 @@ def test_off_topic_ticket_can_be_closed() -> None:
         ({"action": "refund", "invoice_id": "INV-1", "amount_eur": -5}, "amount greater than 0"),
         ({"action": "refund", "invoice_id": "INV-1", "amount_eur": "NaN"}, "amount greater than 0"),
         ({"action": "refund", "invoice_id": "INV-1", "amount_eur": "inf"}, "amount greater than 0"),
+        ({"action": "refund", "invoice_id": "INV-1", "amount_eur": 10.005}, "in whole cents"),
         ({"action": "refund", "invoice_id": "INV-4", "amount_eur": 10.0}, "is overdue"),
         ({"action": "refund", "invoice_id": "INV-9", "amount_eur": 10.0}, "does not belong"),
         ({"action": "refund", "invoice_id": "INV-404", "amount_eur": 10.0}, "does not belong"),
@@ -128,3 +131,20 @@ def test_off_topic_ticket_without_money_words_can_be_closed(body: str) -> None:
     ticket = Ticket(ticket_id="T-X", customer_id="C-200", subject="Lunch", body=body)
     proposed = ProposedDecision(category="other", priority="low", action="close", reason="off-topic")
     assert check_decision(proposed, ticket, INVOICES, KB_IDS).action.type == ActionType.CLOSE
+
+
+def test_refund_amount_is_exact() -> None:
+    decision = check(action="refund", invoice_id="INV-1", amount_eur=48.99)
+
+    assert isinstance(decision.action, RefundAction)
+    assert decision.action.amount_eur == Decimal("48.99")
+
+
+def test_every_broken_rule_is_reported() -> None:
+    decision = check(category="sales", action="refund", invoice_id="INV-4", amount_eur=500.0)
+
+    assert decision.violations == [
+        "category 'sales' is not allowed (allowed: account, billing, technical, other)",
+        "invoice INV-4 is overdue, only paid invoices",
+        "refund 500.0 EUR is larger than invoice INV-4 (49.0 EUR)",
+    ]

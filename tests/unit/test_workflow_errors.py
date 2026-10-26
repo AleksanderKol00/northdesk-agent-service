@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 from temporalio.exceptions import ActivityError, ApplicationError, TimeoutError, TimeoutType
 
@@ -43,7 +45,7 @@ def test_describe_names_the_reason_an_activity_failed(cause: BaseException | Non
     assert _describe(activity_error(cause)) == expected
 
 
-REFUND = RefundAction(invoice_id="INV-1002", amount_eur=49.0)
+REFUND = RefundAction(invoice_id="INV-1002", amount_eur=Decimal("49.0"))
 
 
 @pytest.mark.parametrize(

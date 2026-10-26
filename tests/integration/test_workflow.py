@@ -2,6 +2,7 @@ import asyncio
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -155,7 +156,7 @@ async def test_approved_refund_is_issued(
         answered = await handle.execute_update(TicketWorkflow.approve, Approval(approved=True))
         state = await handle.result()
 
-    refund = RefundAction(invoice_id="INV-1002", amount_eur=49.0)
+    refund = RefundAction(invoice_id="INV-1002", amount_eur=Decimal("49.0"))
     assert waiting.action == refund
     assert answered.step == Step.ACTING  # the update returns once the workflow has acted on the answer
     assert answered.action == refund

@@ -80,13 +80,13 @@ class ToolExecutor:
                 return customer.model_dump_json()
             case "get_invoices":
                 invoices = self._store.get_invoices(self._customer_id)
-                return json.dumps([inv.model_dump() for inv in invoices])
+                return json.dumps([inv.model_dump(mode="json") for inv in invoices])
             case "search_kb":
                 query = args.get("query")
                 if not isinstance(query, str) or not query.strip():
                     return _error("search_kb needs a non-empty 'query' string")
                 articles = self._store.search_kb(query)
-                return json.dumps([a.model_dump() for a in articles])
+                return json.dumps([a.model_dump(mode="json") for a in articles])
             case _:
                 return _error(f"unknown tool {name!r}")
 

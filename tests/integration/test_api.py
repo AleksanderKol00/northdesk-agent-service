@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -12,7 +14,7 @@ from northdesk_ticket_agent.orchestration.models import Approval, Step
 from tests.fixtures.client import StubTicketWorkflows
 from tests.fixtures.logs import LogLines
 
-REFUND = RefundAction(invoice_id="INV-1002", amount_eur=49.0)
+REFUND = RefundAction(invoice_id="INV-1002", amount_eur=Decimal("49.0"))
 
 
 def await_refund_approval(workflows: StubTicketWorkflows, ticket_id: str) -> None:
@@ -73,7 +75,7 @@ def test_get_ticket_returns_its_state(
     body = response.json()
     assert body["ticket_id"] == body["workflow_id"] == "T-2"
     assert body["step"] == "awaiting_approval"
-    assert body["decision"]["action"] == {"type": "refund", "invoice_id": "INV-1002", "amount_eur": 49.0}
+    assert body["decision"]["action"] == {"type": "refund", "invoice_id": "INV-1002", "amount_eur": "49.0"}
     assert body["receipt"] is None
 
 
