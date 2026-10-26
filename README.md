@@ -51,12 +51,13 @@ uv sync
 uv run pytest            # all tests; --cov adds branch coverage (CI fails under 90%)
 ```
 
-No API key and no network are needed, except once: the first run downloads Temporal's test server binary and caches
-it. `tests/unit/` holds fast, isolated tests (the decision checks, the agent, the activities, the Helpdesk, the
-logs); `tests/integration/` holds the workflow on Temporal's time-skipping test server and the API over HTTP. The
-workflow tests replace the activities with fakes and cover an answered ticket, approved and rejected refunds, a refund
-with no answer for 24 hours, an activity that fails and then succeeds on retry, tickets that cannot be decided, and an
-action that keeps failing; one more runs all seven example tickets through the real activities.
+No API key is needed, and no network after the first run, which downloads Temporal's test server binary and caches
+it (see [limitations](#assumptions-limitations-and-next-steps)). `tests/unit/` holds fast, isolated tests (the
+decision checks, the agent, the activities, the Helpdesk, the logs); `tests/integration/` holds the workflow on
+Temporal's time-skipping test server and the API over HTTP. The workflow tests swap the activities for fakes and walk
+every path through the workflow: a reply, a refund that is approved, rejected or left past the 24-hour timer, a step
+that recovers on retry, a decision that cannot be made, and an action that fails for good. Another test runs all
+seven example tickets through the real activities.
 
 ### Locally
 
@@ -96,7 +97,6 @@ curl -s localhost:8000/tickets/T-1
 ```json
 {
   "ticket_id": "T-1",
-  "workflow_id": "T-1",
   "step": "done",
   "decision": {
     "category": "account",
@@ -107,7 +107,8 @@ curl -s localhost:8000/tickets/T-1
   "approval": null,
   "action": {"type": "reply", "message": "Hello, thanks for reaching out. Open the sign-in page, …", "article_ids": ["KB-1"]},
   "receipt": {"reference": "RE-0001", "ticket_id": "T-1", "action": {"type": "reply", "…": "…"}},
-  "error": null
+  "error": null,
+  "workflow_id": "T-1"
 }
 ```
 
@@ -156,6 +157,7 @@ flowchart LR
     decide --> agent[Agent<br>tool-calling loop] --> llm[LLM<br>OpenAI or fake]
     agent --> data[(Customers, invoices,<br>knowledge base)]
     check --> rules[Decision checks]
+    check --> data
     act --> helpdesk[Fake Helpdesk]
 ```
 
@@ -212,8 +214,8 @@ own, and a slow LLM never holds up an HTTP request.
 
 **Two kinds of errors.** Every outside error is either temporary (an LLM connection error, timeout, rate limit or
 5xx; a Helpdesk failure) or permanent (an unknown customer, a model answer still unreadable after 3 attempts, a
-Helpdesk conflict). Activities raise temporary ones as retryable and permanent ones as non-retryable, so Temporal retries only what a
-retry can fix. Retries live in Temporal alone: the OpenAI SDK's own retries are off.
+Helpdesk conflict). Activities raise temporary ones as retryable and permanent ones as non-retryable, so Temporal
+retries only what a retry can fix. Retries live in Temporal alone: the OpenAI SDK's own retries are off.
 
 | Step | Timeout per attempt | Retries |
 | --- | --- | --- |
@@ -240,8 +242,8 @@ moment as the 24-hour timeout still counts.
 
 ## Keeping the rules safe from ticket text
 
-Ticket text is written by customers, so the design assumes it will try to steer the model, and does not rely on the
-model resisting:
+Anyone who can open a ticket controls its text, so the design assumes some tickets will try to steer the model, and
+does not rely on the model resisting:
 
 - **The model only proposes.** Its decision is a proposal that `check_decision` checks in code before anything
   happens, and the workflow is the only path to the Helpdesk. The model has no tool that acts.
@@ -279,8 +281,8 @@ This is a design only: nothing here has been deployed, and the repo has no infra
   The image is built by GitHub Actions and pushed to Azure Container Registry, which the apps pull from with a managed
   identity. The API sits behind Azure API Management (or Front Door) for authentication and rate limits.
 - **Temporal:** Temporal Cloud, which runs in Azure regions and takes the database, upgrades and scaling of the
-  Temporal cluster off our hands. Self-hosting it on Azure Kubernetes Service with Azure Database for PostgreSQL also works, but is a
-  system of its own to run.
+  Temporal cluster off our hands. Self-hosting it on Azure Kubernetes Service with Azure Database for PostgreSQL also
+  works, but is a system of its own to run.
 - **LLM:** Azure OpenAI (Azure AI Foundry), reached over a private endpoint. The client already uses the OpenAI
   SDK, which talks to Azure OpenAI too; it needs a setting for the endpoint and token-based sign-in instead of a key.
 - **Secrets:** in Azure Key Vault, referenced by the Container Apps as secrets; nothing in the image or the repo. The
@@ -342,6 +344,8 @@ Things it got wrong, and how they were caught:
 - **Closing still rests on the model's judgement.** A ticket that talks the model into calling a real problem
   off-topic can be closed unseen.
 - **Reading a ticket needs a running worker**, since the state comes from a workflow query.
+- **The first test run needs network.** The workflow tests use Temporal's test server, a binary the SDK downloads on
+  first use and caches in the temp directory; later runs are offline. Baking it into a test image would remove that.
 
 **Next steps**
 
