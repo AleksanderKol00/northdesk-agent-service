@@ -4,11 +4,8 @@ import pytest
 from pydantic import ValidationError
 
 from northdesk_ticket_agent.domain.models import Action, CloseAction, EscalateAction, RefundAction, ReplyAction
-from northdesk_ticket_agent.services.helpdesk import (
-    FakeHelpdesk,
-    HelpdeskConflictError,
-    HelpdeskTemporaryError,
-)
+from northdesk_ticket_agent.services.fake_helpdesk import FakeHelpdesk
+from northdesk_ticket_agent.services.helpdesk import HelpdeskConflictError, HelpdeskTemporaryError
 
 REFUND = RefundAction(invoice_id="INV-1002", amount_eur=49.0)
 

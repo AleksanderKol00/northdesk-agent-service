@@ -18,7 +18,7 @@ from northdesk_ticket_agent.orchestration.activities import TicketActivities
 from northdesk_ticket_agent.orchestration.client import connect
 from northdesk_ticket_agent.orchestration.workflow import TicketWorkflow
 from northdesk_ticket_agent.services.datastore import DataStore
-from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk
+from northdesk_ticket_agent.services.fake_helpdesk import FakeHelpdesk
 
 # How long a stopping worker lets running activities finish before cancelling them. Kept under Docker's default 10 s
 # stop timeout, so a `docker compose stop` ends in a clean shutdown and not a kill.
