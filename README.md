@@ -51,8 +51,16 @@ uv sync
 uv run pytest            # all tests; --cov adds branch coverage (CI fails under 90%)
 ```
 
-No API key is needed, and no network after the first run, which downloads Temporal's test server binary and caches
-it (see [limitations](#assumptions-limitations-and-next-steps)). `tests/unit/` holds fast, isolated tests (the
+No API key is needed. The workflow tests run on Temporal's time-skipping test server, a binary the SDK downloads on
+the first run and caches in the temp directory; later runs are offline. To run them with no network at all, point
+`TEMPORAL_TEST_SERVER_PATH` at a copy of the binary (the cached one is `temporal-test-server-sdk-python-<version>` in
+the temp directory; releases are at https://github.com/temporalio/sdk-java/releases):
+
+```sh
+TEMPORAL_TEST_SERVER_PATH=/path/to/temporal-test-server uv run pytest
+```
+
+`tests/unit/` holds fast, isolated tests (the
 decision checks, the agent, the activities, the Helpdesk, the logs); `tests/integration/` holds the workflow on
 Temporal's time-skipping test server and the API over HTTP. The workflow tests swap the activities for fakes and walk
 every path through the workflow: a reply, a refund that is approved, rejected or left past the 24-hour timer, a step
@@ -344,8 +352,8 @@ Things it got wrong, and how they were caught:
 - **Closing still rests on the model's judgement.** A ticket that talks the model into calling a real problem
   off-topic can be closed unseen.
 - **Reading a ticket needs a running worker**, since the state comes from a workflow query.
-- **The first test run needs network.** The workflow tests use Temporal's test server, a binary the SDK downloads on
-  first use and caches in the temp directory; later runs are offline. Baking it into a test image would remove that.
+- **The first test run needs network**, unless `TEMPORAL_TEST_SERVER_PATH` points at Temporal's test server binary
+  (see [Tests](#tests)). CI downloads it on every run.
 
 **Next steps**
 
