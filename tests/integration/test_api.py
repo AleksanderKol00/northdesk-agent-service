@@ -75,7 +75,7 @@ def test_get_ticket_returns_its_state(
     body = response.json()
     assert body["ticket_id"] == body["workflow_id"] == "T-2"
     assert body["step"] == "awaiting_approval"
-    assert body["decision"]["action"] == {"type": "refund", "invoice_id": "INV-1002", "amount_eur": "49.0"}
+    assert body["decision"]["action"] == {"type": "refund", "invoice_id": "INV-1002", "amount_eur": "49.00"}
     assert body["helpdesk_reference"] is None
 
 

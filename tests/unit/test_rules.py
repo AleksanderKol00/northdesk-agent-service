@@ -72,6 +72,8 @@ def test_off_topic_ticket_can_be_closed() -> None:
         ({"action": "refund", "invoice_id": "INV-9", "amount_eur": 10.0}, "does not belong"),
         ({"action": "refund", "invoice_id": "INV-404", "amount_eur": 10.0}, "does not belong"),
         ({"action": "refund", "invoice_id": "INV-1", "amount_eur": 5000.0}, "larger than invoice"),
+        ({"action": "refund", "invoice_id": "INV-1", "amount_eur": 1e26}, "larger than invoice"),
+        ({"action": "refund", "invoice_id": "INV-1", "amount_eur": 1e300}, "larger than invoice"),
         ({"action": "escalate"}, "escalate needs a reason"),
         ({"category": "other", "action": "close", "reason": ""}, "close needs a reason"),
         ({"category": "account", "action": "close", "reason": "resolved"}, "close is only for category other"),

@@ -30,7 +30,6 @@ _MONEY_WORDS = re.compile(
     r"\b(?:refund\w*|charge[ds]?|invoices?|pay|paid|payments?|billing|billed|money|eur|euros?)\b|€",
     re.IGNORECASE,
 )
-_CENT = Decimal("0.01")
 
 
 def check_decision(
@@ -134,7 +133,9 @@ def _to_money(value: float | None) -> Decimal | None:
     if value is None or not math.isfinite(value) or value <= 0:
         return None
     amount = Decimal(str(value))  # str: the shortest decimal for the float (49.99), not its binary expansion
-    return amount if amount == amount.quantize(_CENT) else None
+    # The exponent, not quantize(): quantizing 1e26 to the cent needs more digits than the context has, and raises.
+    exponent = amount.as_tuple().exponent
+    return amount if isinstance(exponent, int) and exponent >= -2 else None
 
 
 def _parse_enum[E: (Category, Priority, ActionType)](

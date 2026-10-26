@@ -2,7 +2,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PlainSerializer
 
 
 class Ticket(BaseModel):
@@ -15,8 +15,9 @@ class Ticket(BaseModel):
     body: str = Field(max_length=10_000)
 
 
-# Euros, exact to the cent. JSON carries it as a string ("49.0"), so no client turns it into a float.
-Money = Annotated[Decimal, Field(decimal_places=2)]
+# Euros, exact to the cent. JSON carries it as a string with two decimals ("49.00"), so no client turns it into a float
+# and the same amount always reads the same.
+Money = Annotated[Decimal, Field(decimal_places=2), PlainSerializer(lambda amount: f"{amount:.2f}", when_used="json")]
 
 
 class Customer(BaseModel):
