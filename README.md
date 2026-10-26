@@ -82,7 +82,8 @@ CI (GitHub Actions) runs the pre-commit hooks, a secret scan of the git history 
 ## Example requests
 
 The example tickets are in [`src/northdesk_ticket_agent/data/tickets.json`](src/northdesk_ticket_agent/data/tickets.json).
-The responses below are real ones from the fake LLM, shortened where marked.
+The responses below are real ones from the fake LLM, shortened where marked. Amounts are exact to the cent and sent as
+strings (`"49.0"`), so no client reads them as floats. A subject is at most 200 characters and a body 10,000.
 
 **Start a ticket.** The call returns at once with `202`; the workflow ID is the ticket ID.
 
@@ -98,7 +99,8 @@ curl -s localhost:8000/tickets -H 'content-type: application/json' -d '{
 Sending the same ticket ID again starts nothing and returns the existing workflow with `200` and `"created": false`.
 
 **Read a ticket.** `step` is one of `deciding`, `checking`, `awaiting_approval`, `acting`, `done` or `failed`.
-`decision` is the checked decision; `action` is what is (or will be) carried out, and `receipt` is the Helpdesk's.
+`decision` is the checked decision; `action` is what is (or will be) carried out, and `helpdesk_reference` is the
+Helpdesk's reference for it once done.
 
 ```sh
 curl -s localhost:8000/tickets/T-1
@@ -106,6 +108,7 @@ curl -s localhost:8000/tickets/T-1
 ```json
 {
   "ticket_id": "T-1",
+  "workflow_id": "T-1",
   "step": "done",
   "decision": {
     "category": "account",
@@ -115,9 +118,8 @@ curl -s localhost:8000/tickets/T-1
   },
   "approval": null,
   "action": {"type": "reply", "message": "Hello, thanks for reaching out. Open the sign-in page, …", "article_ids": ["KB-1"]},
-  "receipt": {"reference": "RE-0001", "ticket_id": "T-1", "action": {"type": "reply", "…": "…"}},
-  "error": null,
-  "workflow_id": "T-1"
+  "helpdesk_reference": "RE-0001",
+  "error": null
 }
 ```
 
@@ -125,7 +127,7 @@ curl -s localhost:8000/tickets/T-1
 September invoice:
 
 ```sh
-curl -s localhost:8000/tickets/T-2   # "step": "awaiting_approval", "action": {"type": "refund", "invoice_id": "INV-1002", "amount_eur": 49.0}
+curl -s localhost:8000/tickets/T-2   # "step": "awaiting_approval", "action": {"type": "refund", "invoice_id": "INV-1002", "amount_eur": "49.0"}
 curl -s localhost:8000/tickets/T-2/approval -H 'content-type: application/json' \
   -d '{"approved": true, "comment": "Duplicate charge confirmed"}'
 ```
@@ -134,7 +136,7 @@ The approval answers once the workflow has moved on, with the state (shortened):
 
 ```json
 {"ticket_id": "T-2", "step": "acting", "approval": {"approved": true, "comment": "Duplicate charge confirmed"},
- "action": {"type": "refund", "invoice_id": "INV-1002", "amount_eur": 49.0}, "receipt": null, "…": "…"}
+ "action": {"type": "refund", "invoice_id": "INV-1002", "amount_eur": "49.0"}, "helpdesk_reference": null, "…": "…"}
 ```
 
 `{"approved": false}` turns the refund into an escalation. A second answer gets `409` (`the refund for ticket T-2 was
@@ -222,8 +224,8 @@ own, and a slow LLM never holds up an HTTP request.
 ## Retries, timeouts and duplicates
 
 **Two kinds of errors.** Every outside error is either temporary (an LLM connection error, timeout, rate limit or
-5xx; a Helpdesk failure) or permanent (an unknown customer, a model answer still unreadable after 3 attempts, a
-Helpdesk conflict). Activities raise temporary ones as retryable and permanent ones as non-retryable, so Temporal
+5xx; a Helpdesk failure) or permanent (a rejected LLM request or a response it cannot read, an unknown customer, a
+model answer still unreadable after 3 attempts, a Helpdesk conflict). Activities raise temporary ones as retryable and permanent ones as non-retryable, so Temporal
 retries only what a retry can fix. Retries live in Temporal alone: the OpenAI SDK's own retries are off.
 
 | Step | Timeout per attempt | Retries |
@@ -258,7 +260,7 @@ does not rely on the model resisting:
   happens, and the workflow is the only path to the Helpdesk. The model has no tool that acts.
 - **The checks use facts, not the model's word.** Category, priority and action must be allowed values. A refund must
   name a `paid` invoice that belongs to the ticket's customer (taken from the ticket, never from the model), for a
-  finite amount above 0 and no larger than the invoice. Closing is allowed only for category `other`, and never for
+  finite amount above 0, in whole cents and no larger than the invoice. Closing is allowed only for category `other`, and never for
   a ticket whose subject or body talks about money (refund, invoice, charge, payment, EUR and the like), whatever
   category the model gave it. Any violation turns the decision into an escalation.
 - **Refunds always need a person**, whatever the ticket says about approval.
