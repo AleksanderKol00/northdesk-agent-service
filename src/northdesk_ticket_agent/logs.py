@@ -14,6 +14,7 @@ from three places, later ones winning on a clash:
 Following a ticket end to end is then one filter, e.g. `jq 'select(.ticket_id == "T-2")'`.
 
 Ticket text is untrusted and may hold personal data: log IDs, types and counts, never the subject, body or reply.
+Libraries that may log payloads at DEBUG (`LIBRARY_LOGGERS`) are kept at INFO, so `LOG_LEVEL=DEBUG` adds only our lines.
 """
 
 import json
@@ -36,6 +37,10 @@ TEMPORAL_DETAILS = ("temporal_workflow", "temporal_activity")
 UVICORN_LOGGERS = ("uvicorn", "uvicorn.error")
 # Replaced by the API's own access line, which knows the ticket (see api/access_log.py).
 UVICORN_ACCESS_LOGGER = "uvicorn.access"
+# Libraries whose DEBUG lines can carry payloads: Temporal's SDK writes each activity's result, which for
+# `ticket.decide` is what the model wrote. They stay at INFO when LOG_LEVEL=DEBUG, so DEBUG adds only our own lines.
+# Top-level names, so their submodules (private ones included) are covered without being named.
+LIBRARY_LOGGERS = ("temporalio", "openai", "httpx", "httpcore")
 
 # Attributes every LogRecord has; anything else on a record came from `extra`. uvicorn's `color_message` is its message
 # with terminal colour codes, which have no place in JSON.
@@ -111,6 +116,9 @@ def configure_logging(level: LogLevel = "INFO", stream: TextIO | None = None) ->
         logger.propagate = True
         logger.setLevel(logging.NOTSET)  # the root's level applies
     logging.getLogger(UVICORN_ACCESS_LOGGER).disabled = True
+    for name in LIBRARY_LOGGERS:
+        # At any other level the root's level applies, as for every other logger.
+        logging.getLogger(name).setLevel(logging.INFO if level == "DEBUG" else logging.NOTSET)
 
 
 def _core_fields(record: logging.LogRecord) -> dict[str, Any]:

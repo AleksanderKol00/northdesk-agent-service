@@ -24,9 +24,6 @@ from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk
 # stop timeout, so a `docker compose stop` ends in a clean shutdown and not a kill.
 GRACEFUL_SHUTDOWN = timedelta(seconds=8)
 STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT)
-# At DEBUG, this SDK logger writes each activity's result ("Completing activity with completion"), and the result of
-# `ticket.decide` is what the model wrote, which can repeat the ticket. It is kept at INFO even when LOG_LEVEL=DEBUG.
-SDK_ACTIVITY_LOGGER = "temporalio.worker._activity"
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +58,8 @@ def stop_on_signals() -> asyncio.Event:
 
 def configure_worker_logging(level: LogLevel) -> None:
     """JSON logs, as in the API. Temporal's details become fields of the line, so they are not appended to the
-    message as well (the SDK's default). The SDK's activity results stay out of the logs, even at DEBUG."""
+    message as well (the SDK's default)."""
     configure_logging(level)
-    logging.getLogger(SDK_ACTIVITY_LOGGER).setLevel(max(logging.INFO, logging.getLevelNamesMapping()[level]))
     activity.logger.activity_info_on_message = False
     workflow.logger.workflow_info_on_message = False
 
