@@ -83,7 +83,7 @@ CI (GitHub Actions) runs the pre-commit hooks, a secret scan of the git history 
 
 The example tickets are in [`src/northdesk_ticket_agent/data/tickets.json`](src/northdesk_ticket_agent/data/tickets.json).
 The responses below are real ones from the fake LLM, shortened where marked. Amounts are exact to the cent and sent as
-strings (`"49.0"`), so no client reads them as floats. A subject is at most 200 characters and a body 10,000.
+strings with two decimals (`"49.00"`), so no client reads them as floats. A subject is at most 200 characters and a body 10,000.
 
 **Start a ticket.** The call returns at once with `202`; the workflow ID is the ticket ID.
 
@@ -127,7 +127,7 @@ curl -s localhost:8000/tickets/T-1
 September invoice:
 
 ```sh
-curl -s localhost:8000/tickets/T-2   # "step": "awaiting_approval", "action": {"type": "refund", "invoice_id": "INV-1002", "amount_eur": "49.0"}
+curl -s localhost:8000/tickets/T-2   # "step": "awaiting_approval", "action": {"type": "refund", "invoice_id": "INV-1002", "amount_eur": "49.00"}
 curl -s localhost:8000/tickets/T-2/approval -H 'content-type: application/json' \
   -d '{"approved": true, "comment": "Duplicate charge confirmed"}'
 ```
@@ -136,7 +136,7 @@ The approval answers once the workflow has moved on, with the state (shortened):
 
 ```json
 {"ticket_id": "T-2", "step": "acting", "approval": {"approved": true, "comment": "Duplicate charge confirmed"},
- "action": {"type": "refund", "invoice_id": "INV-1002", "amount_eur": "49.0"}, "helpdesk_reference": null, "…": "…"}
+ "action": {"type": "refund", "invoice_id": "INV-1002", "amount_eur": "49.00"}, "helpdesk_reference": null, "…": "…"}
 ```
 
 `{"approved": false}` turns the refund into an escalation. A second answer gets `409` (`the refund for ticket T-2 was

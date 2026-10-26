@@ -34,6 +34,13 @@ def test_money_is_exact_and_sent_as_a_string() -> None:
     assert refund.model_dump(mode="json")["amount_eur"] == "0.30"
 
 
+@pytest.mark.parametrize(
+    ("amount", "sent"), [(Decimal("49"), "49.00"), (Decimal("49.0"), "49.00"), (Decimal("1E+3"), "1000.00")]
+)
+def test_money_is_always_sent_with_two_decimals(amount: Decimal, sent: str) -> None:
+    assert RefundAction(invoice_id="INV-1", amount_eur=amount).model_dump(mode="json")["amount_eur"] == sent
+
+
 def test_money_rejects_fractions_of_a_cent() -> None:
     with pytest.raises(ValidationError):
         RefundAction(invoice_id="INV-1", amount_eur=Decimal("0.005"))
