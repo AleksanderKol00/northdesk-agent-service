@@ -76,7 +76,7 @@ def test_get_ticket_returns_its_state(
     assert body["ticket_id"] == body["workflow_id"] == "T-2"
     assert body["step"] == "awaiting_approval"
     assert body["decision"]["action"] == {"type": "refund", "invoice_id": "INV-1002", "amount_eur": "49.0"}
-    assert body["receipt"] is None
+    assert body["helpdesk_reference"] is None
 
 
 def test_get_unknown_ticket_is_404(client: TestClient) -> None:
