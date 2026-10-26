@@ -251,8 +251,10 @@ def test_a_ticket_request_is_traced_by_its_route_and_the_health_check_is_not(
 ) -> None:
     client.get("/health")
     client.get(f"/tickets/{example_tickets['T-1'].ticket_id}")
+    client.get("/tickets/health")  # a ticket that happens to be called "health"
 
-    [span] = spans.all()
+    [span, health_ticket] = spans.all()
     assert span.name == "GET /tickets/{ticket_id}"
     assert span.attributes is not None
     assert span.attributes["http.route"] == "/tickets/{ticket_id}"
+    assert health_ticket.name == "GET /tickets/{ticket_id}"
