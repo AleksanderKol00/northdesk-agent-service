@@ -25,7 +25,7 @@ from northdesk_ticket_agent.domain.rules import check_decision
 from northdesk_ticket_agent.logs import log_context
 from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.errors import ServiceError, TemporaryServiceError
-from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk, HelpdeskReceipt
+from northdesk_ticket_agent.services.helpdesk import Helpdesk, HelpdeskReceipt
 
 
 class CheckInput(BaseModel):
@@ -41,7 +41,7 @@ class ActInput(BaseModel):
 class TicketActivities:
     """The activities, sharing one agent, data store and Helpdesk client built once by the worker."""
 
-    def __init__(self, agent: TicketAgent, store: DataStore, helpdesk: FakeHelpdesk) -> None:
+    def __init__(self, agent: TicketAgent, store: DataStore, helpdesk: Helpdesk) -> None:
         self._agent = agent
         self._store = store
         self._helpdesk = helpdesk

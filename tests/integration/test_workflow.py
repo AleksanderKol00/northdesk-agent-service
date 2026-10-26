@@ -33,7 +33,8 @@ from northdesk_ticket_agent.orchestration.workflow import (
     TicketWorkflow,
 )
 from northdesk_ticket_agent.services.datastore import DataStore
-from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk, HelpdeskReceipt
+from northdesk_ticket_agent.services.fake_helpdesk import FakeHelpdesk
+from northdesk_ticket_agent.services.helpdesk import HelpdeskReceipt
 from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")

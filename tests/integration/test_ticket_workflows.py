@@ -25,7 +25,7 @@ from northdesk_ticket_agent.orchestration.errors import (
 from northdesk_ticket_agent.orchestration.tickets import ANSWER_MAY_BE_RECORDED, StartedTicket, TemporalTicketWorkflows
 from northdesk_ticket_agent.orchestration.workflow import Approval, Step, TicketState, TicketWorkflow
 from northdesk_ticket_agent.services.datastore import DataStore
-from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk
+from northdesk_ticket_agent.services.fake_helpdesk import FakeHelpdesk
 from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
 from tests.fixtures.logs import LogLines
 
@@ -245,7 +245,7 @@ async def test_one_filter_follows_a_ticket_end_to_end(
         "temporalio.workflow",
         "temporalio.activity",
         "northdesk_ticket_agent.agent.agent",
-        "northdesk_ticket_agent.services.helpdesk",
+        "northdesk_ticket_agent.services.fake_helpdesk",
     }
     assert all(line["workflow_id"] == ticket.ticket_id for line in lines)
     # Nothing about this ticket is missed by the filter: every line naming its workflow names the ticket too.

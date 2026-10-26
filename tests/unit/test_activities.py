@@ -21,7 +21,7 @@ from northdesk_ticket_agent.domain.models import (
 from northdesk_ticket_agent.orchestration.activities import ActInput, CheckInput, TicketActivities
 from northdesk_ticket_agent.orchestration.worker import STOP_SIGNALS, build_activities, stop_on_signals
 from northdesk_ticket_agent.services.datastore import DataStore
-from northdesk_ticket_agent.services.helpdesk import FakeHelpdesk
+from northdesk_ticket_agent.services.fake_helpdesk import FakeHelpdesk
 from northdesk_ticket_agent.services.llm.base import (
     LLMClient,
     LLMError,

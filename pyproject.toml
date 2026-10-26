@@ -129,6 +129,8 @@ source_modules = [
     "northdesk_ticket_agent.agent",
     "northdesk_ticket_agent.domain",
     "northdesk_ticket_agent.services.datastore",
+    "northdesk_ticket_agent.services.helpdesk",
+    "northdesk_ticket_agent.services.fake_helpdesk",
     "northdesk_ticket_agent.services.llm.base",
     "northdesk_ticket_agent.services.llm.fake_client",
 ]
