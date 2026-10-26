@@ -3,7 +3,8 @@
 Each activity turns the errors it knows into an `ApplicationError` whose `type` is the original exception's class name,
 marked retryable or not. Temporal then retries only what a retry can fix, and the workflow can tell the reasons apart
 (an unknown customer is escalated differently from an outage). Anything unexpected is left as is, so it is retried
-under the workflow's retry policy, which caps the number of attempts.
+under the workflow's retry policy, which caps the number of attempts; except in `check`, which is pure code, so any
+error there fails at once.
 
 Each activity runs in a `log_context` with the ticket's IDs, so every line logged meanwhile carries them, including the
 agent's and the Helpdesk's. A failed attempt is logged by the SDK itself ("Completing activity as failed"). Lines name
@@ -62,12 +63,19 @@ class TicketActivities:
     async def check(self, request: CheckInput) -> Decision:
         ticket = request.ticket
         with _ticket_log_context(ticket.ticket_id):
-            decision = check_decision(
-                request.proposed,
-                ticket,
-                invoices=self._store.get_invoices(ticket.customer_id),
-                kb_article_ids=self._store.article_ids(),
-            )
+            try:
+                decision = check_decision(
+                    request.proposed,
+                    ticket,
+                    invoices=self._store.get_invoices(ticket.customer_id),
+                    kb_article_ids=self._store.article_ids(),
+                )
+            except Exception as exc:
+                # The checks are pure code on in-memory data: a retry would fail the same way, so fail once. Only the
+                # type: the message may quote the model's values.
+                raise ApplicationError(
+                    f"Checking the decision failed: {type(exc).__name__}", type=type(exc).__name__, non_retryable=True
+                ) from exc
             fields = {"action": decision.action.type, "category": decision.category, "priority": decision.priority}
             if decision.violations:
                 # The count only: the violations quote the model's values, which may repeat the ticket's text.
