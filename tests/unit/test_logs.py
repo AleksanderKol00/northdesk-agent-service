@@ -105,7 +105,7 @@ def test_bind_outside_a_context_does_nothing() -> None:
     assert "ticket_id" not in formatted(record())
 
 
-def test_the_ticket_workflows_ids_are_lifted_from_temporal_details() -> None:
+def test_the_ticket_ids_are_lifted_from_temporal_details() -> None:
     details = {"workflow_id": "T-1", "workflow_type": "TicketWorkflow", "attempt": 2}
 
     from_workflow = formatted(record(temporal_workflow=details))
@@ -125,7 +125,7 @@ def test_a_line_from_temporal_core_keeps_its_target_and_fields() -> None:
     assert line["message"] == "Failing workflow task"
     assert line["core_target"] == "temporalio_sdk_core::worker"
     assert line["core_fields"] == {"workflow_id": "T-1", "attempt": 3}
-    assert line["workflow_id"] == "T-1"
+    assert line["workflow_id"] == line["ticket_id"] == "T-1"
     assert "temporal_log" not in line
 
 
@@ -135,13 +135,6 @@ def test_core_logs_are_forwarded_to_python_logging() -> None:
     assert config.forwarding is not None
     assert config.forwarding.logger.name == CORE_LOGGER
     assert not config.forwarding.append_log_fields_to_message  # they become fields of the JSON line instead
-
-
-def test_another_workflow_gets_no_ticket_id() -> None:
-    line = formatted(record(temporal_workflow={"workflow_id": "other", "workflow_type": "OtherWorkflow"}))
-
-    assert line["workflow_id"] == "other"
-    assert "ticket_id" not in line
 
 
 @pytest.mark.usefixtures("restore_logging")

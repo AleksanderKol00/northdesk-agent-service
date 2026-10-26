@@ -8,8 +8,8 @@ Anything that goes wrong before the action (an unknown customer, an unreadable a
 the ticket into an escalation with the reason, so a person picks it up. If the action itself fails for good, the
 workflow fails with the reason; the state, readable through the `status` query, says where it stopped.
 
-It logs through `workflow.logger`, which stays quiet while a workflow is replayed, so each line is written once. The
-logger tags every line with the workflow, which the JSON logs turn into its `workflow_id` and `ticket_id`.
+It logs through `workflow.logger`, which stays quiet during replay and tags each line with the workflow, which the JSON
+logs turn into its `workflow_id` and `ticket_id`.
 """
 
 from contextlib import suppress
@@ -30,7 +30,6 @@ with workflow.unsafe.imports_passed_through():
         RefundAction,
         Ticket,
     )
-    from northdesk_ticket_agent.logs import TICKET_WORKFLOW_TYPE
     from northdesk_ticket_agent.orchestration.activities import ActInput, CheckInput
     from northdesk_ticket_agent.services.helpdesk import HelpdeskReceipt
 
@@ -89,8 +88,7 @@ class TicketState(BaseModel):
     error: str | None = None
 
 
-# Named from logs.py, whose JSON lines add `ticket_id` to every line tagged with this workflow type.
-@workflow.defn(name=TICKET_WORKFLOW_TYPE)
+@workflow.defn
 class TicketWorkflow:
     @workflow.init
     def __init__(self, ticket: Ticket) -> None:

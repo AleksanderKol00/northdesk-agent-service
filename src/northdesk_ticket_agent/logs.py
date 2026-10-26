@@ -4,9 +4,9 @@
 from three places, later ones winning on a clash:
 
 - Temporal's loggers (`workflow.logger`, `activity.logger`) attach the running workflow or activity as
-  `temporal_workflow` / `temporal_activity`. Its `workflow_id` is copied to the top level, and for the ticket workflow
-  also as `ticket_id`, since that workflow's ID is the ticket ID. So the SDK's own lines (a failed activity attempt)
-  are found by the same filter as ours.
+  `temporal_workflow` / `temporal_activity`, and Temporal Core's forwarded lines may name one too. Its `workflow_id` is
+  copied to the top level, and also as `ticket_id`: the only workflow in this service is the ticket's, whose ID is the
+  ticket ID. So the SDK's own lines (a failed activity attempt) are found by the same filter as ours.
 - `log_context(...)`: fields for every line logged inside the block, from any module. The activities use it, so the
   agent's and the Helpdesk's lines carry the ticket's IDs without knowing about them.
 - `extra={...}` on the call itself.
@@ -28,9 +28,6 @@ from typing import Any, Literal, TextIO
 
 type LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
-# The workflow whose ID is the ticket ID (see orchestration/tickets.py). Its `@workflow.defn` takes the name from here,
-# so the two cannot drift apart, and this module still needs no Temporal import.
-TICKET_WORKFLOW_TYPE = "TicketWorkflow"
 TEMPORAL_DETAILS = ("temporal_workflow", "temporal_activity")
 
 # uvicorn and the FastAPI CLI give these loggers handlers of their own; they are sent through ours instead.
@@ -129,7 +126,7 @@ def _core_fields(record: logging.LogRecord) -> dict[str, Any]:
     fields = dict(core.fields)
     line: dict[str, Any] = {"core_target": core.target, "core_fields": fields}
     if isinstance(fields.get("workflow_id"), str):
-        line["workflow_id"] = fields["workflow_id"]
+        line |= _ids(fields["workflow_id"])
     return line
 
 
@@ -137,8 +134,10 @@ def _temporal_ids(record: logging.LogRecord) -> dict[str, Any]:
     for key in TEMPORAL_DETAILS:
         details = getattr(record, key, None)
         if isinstance(details, Mapping) and "workflow_id" in details:
-            ids = {"workflow_id": details["workflow_id"]}
-            if details.get("workflow_type") == TICKET_WORKFLOW_TYPE:
-                ids["ticket_id"] = details["workflow_id"]
-            return ids
+            return _ids(details["workflow_id"])
     return {}
+
+
+def _ids(workflow_id: Any) -> dict[str, Any]:
+    """Every workflow here is a ticket's, with the ticket ID as its workflow ID."""
+    return {"workflow_id": workflow_id, "ticket_id": workflow_id}
