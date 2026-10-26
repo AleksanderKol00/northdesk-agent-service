@@ -29,9 +29,9 @@ Python 3.14, FastAPI, Temporal, managed with [uv](https://docs.astral.sh/uv/).
 docker compose up --build
 ```
 
-No `.env` and no API key are needed: the defaults use the fake LLM. This starts the Temporal dev server, the API and
-one worker. The API is on http://localhost:8000 (OpenAPI docs at `/docs`), the Temporal web UI on
-http://localhost:8233. Temporal keeps its state in a volume: `docker compose down -v` wipes it, which is also how to
+No `.env` and no API key are needed: the defaults use the fake LLM. This starts the Temporal dev server, the API, one
+worker and Jaeger for traces. The API is on http://localhost:8000 (OpenAPI docs at `/docs`), the Temporal web UI on
+http://localhost:8233, Jaeger's UI on http://localhost:16686. Temporal keeps its state in a volume: `docker compose down -v` wipes it, which is also how to
 send the example tickets again (a ticket ID is processed once).
 
 To change a setting, `cp .env.example .env` and edit it:
@@ -44,6 +44,7 @@ To change a setting, `cp .env.example .env` and edit it:
 | `HELPDESK_FAILURE_RATE` | `0.2` | Share of fake Helpdesk calls that fail with a temporary error (0 to 1). |
 | `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE` | `localhost:7233`, `default`, `tickets` | Where the API and worker find Temporal. Compose sets the address. |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | – | OTLP/HTTP collector for traces; unset, nothing is traced. Compose points it at Jaeger. |
 
 ### Tests
 
@@ -311,6 +312,41 @@ docker compose logs --no-log-prefix api worker | jq -cR 'fromjson? | select(.tic
 Lines carry IDs, types and counts, never the ticket's text or anything the model wrote, which may repeat it. (The
 `fromjson?` skips the few plain-text lines the FastAPI CLI prints before the app starts.)
 
+## Traces
+
+The API and the worker send OpenTelemetry traces over OTLP to whatever `OTEL_EXPORTER_OTLP_ENDPOINT` names; Compose
+runs Jaeger for them (http://localhost:16686, services `northdesk-api` and `northdesk-worker`). A ticket is one trace,
+from `POST /tickets` through the workflow to each activity, so it shows where the time went:
+
+```text
+northdesk-api     POST /tickets                       57 ms
+northdesk-api       StartWorkflow:TicketWorkflow      55 ms
+northdesk-worker    RunWorkflow:TicketWorkflow         0 ms
+northdesk-worker      RunActivity:ticket.decide     3579 ms
+northdesk-worker        chat                        2497 ms
+northdesk-worker        execute_tool get_customer      0 ms
+northdesk-worker        execute_tool get_invoices      0 ms
+northdesk-worker        chat                        1078 ms
+northdesk-worker      RunActivity:ticket.check         1 ms   ticket.action=refund, ticket.violations=0
+northdesk-worker      HandleUpdate:approve             0 ms   linked to the approval's own trace
+northdesk-worker      RunActivity:ticket.act           1 ms
+```
+
+(A refund on the real model, trimmed; the waiting for approval happens between the spans.)
+
+- FastAPI's instrumentation traces each request except `/health`. Temporal's tracing interceptor, on the client the
+  API and the worker share, carries the trace into the workflow through its headers, and from there to each activity.
+- The agent adds a span per model call (`chat`) and per tool it runs (`execute_tool <name>`), named after
+  OpenTelemetry's GenAI conventions. `ticket.check` puts the checked decision on its span, so a search for
+  `ticket.action=refund` finds the refunds.
+- An approval is a request of its own, with a trace of its own. The workflow handles it inside the ticket's trace,
+  linked to the approval's.
+- The workflow's spans last no time: the interceptor ends them at once, since a workflow can wait for days and be
+  replayed on another worker. The activities' spans have their real durations.
+- A log line written inside a span carries its `trace_id` and `span_id`, so a line leads to its trace and back.
+- As with the logs, span attributes are IDs, types and counts. A tool name the model made up is recorded as
+  `unknown`.
+
 ## Deploying to Azure
 
 This is a design only: nothing here has been deployed, and the repo has no infrastructure code for it.
@@ -332,8 +368,9 @@ This is a design only: nothing here has been deployed, and the repo has no infra
   side (see limitations).
 - **Releases:** workflow code changes need care, because tickets in flight replay with the new code. Temporal's
   worker versioning, or `workflow.patched` for small changes, keeps old tickets on the old path.
-- **What to watch:** logs go to Log Analytics, where `ticket_id` is the field to query; Temporal's SDK metrics and
-  Container Apps metrics go to Azure Monitor. Alerts on failed workflows (each may be a lost refund to check by hand),
+- **What to watch:** logs go to Log Analytics, where `ticket_id` is the field to query; traces go to Application
+  Insights over OTLP (the apps only need a different `OTEL_EXPORTER_OTLP_ENDPOINT`, pointing at a collector);
+  Temporal's SDK metrics and Container Apps metrics go to Azure Monitor. Alerts on failed workflows (each may be a lost refund to check by hand),
   the escalation rate and how many come from failed checks, refunds waiting close to 24 hours, activity retries and
   LLM errors, latency and token cost, the task queue's schedule-to-start latency (too few workers), and the API's 5xx
   and 503 rates.
@@ -393,4 +430,4 @@ Things it got wrong, and how they were caught:
 - Authentication on the API, with the approver's identity stored in the approval.
 - Each LLM call as its own activity, so a retry repeats only the failed call.
 - A larger set of tickets with expected decisions, run against the real model in CI, to catch prompt regressions.
-- OpenTelemetry tracing across the API, the workflow and the activities; Terraform for the Azure setup above.
+- Terraform for the Azure setup above.
