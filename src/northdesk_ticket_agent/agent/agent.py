@@ -1,7 +1,11 @@
 import json
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from opentelemetry import trace
+from opentelemetry.trace import Span, StatusCode
+from opentelemetry.util.types import Attributes
 from pydantic import ValidationError
 
 from northdesk_ticket_agent.agent.errors import (
@@ -26,10 +30,22 @@ from northdesk_ticket_agent.services.llm.factory import build_llm_client
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
-# A tool name comes from the model: only names we offer go into a span, so it can't carry text of its own.
-_TOOL_NAMES = frozenset(spec.name for spec in TOOL_SPECS)
-
 _NO_DECISION_REMINDER = f"Reply only with tool calls. Call {SUBMIT_DECISION} to finish."
+
+
+@contextmanager
+def _span(name: str, attributes: Attributes) -> Iterator[Span]:
+    """A span that records a failure by the error's type only. OpenTelemetry's default puts the message and the
+    stack trace on the span, and a message may quote the ticket or the model (an OpenAI error repeats its request)."""
+    with tracer.start_as_current_span(
+        name, attributes=attributes, record_exception=False, set_status_on_exception=False
+    ) as span:
+        try:
+            yield span
+        except Exception as exc:
+            span.set_attribute("error.type", type(exc).__name__)
+            span.set_status(StatusCode.ERROR, type(exc).__name__)
+            raise
 
 
 class TicketAgent:
@@ -70,9 +86,7 @@ class TicketAgent:
         for step in range(1, self._max_steps + 1):
             # Span names and attributes after OpenTelemetry's GenAI conventions. Counts only: the content is the
             # ticket's and the model's.
-            with tracer.start_as_current_span(
-                "chat", attributes={"gen_ai.operation.name": "chat", "agent.step": step}
-            ) as span:
+            with _span("chat", {"gen_ai.operation.name": "chat", "agent.step": step}) as span:
                 response = await self._llm.complete(messages, TOOL_SPECS)
                 span.set_attribute("gen_ai.response.tool_calls", len(response.tool_calls))
             messages.append(response.as_message())
@@ -87,12 +101,13 @@ class TicketAgent:
             decision: ProposedDecision | None = None
             for call in response.tool_calls:
                 if call.name != SUBMIT_DECISION:
-                    # The name only: arguments are the model's, and may repeat the ticket's text.
-                    logger.info("Tool call: %s", call.name, extra={"tool": call.name})
-                    tool = call.name if call.name in _TOOL_NAMES else "unknown"
-                    with tracer.start_as_current_span(
+                    # The name only, and only one we run: the name and the arguments are the model's, and may repeat
+                    # the ticket's text.
+                    tool = call.name if tools.knows(call.name) else "unknown"
+                    logger.info("Tool call: %s", tool, extra={"tool": tool})
+                    with _span(
                         f"execute_tool {tool}",
-                        attributes={"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": tool},
+                        {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": tool},
                     ):
                         result = tools.run(call.name, call.arguments)
                 elif decision is not None:

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from northdesk_ticket_agent.agent.tools import ToolExecutor
+from northdesk_ticket_agent.agent.tools import SUBMIT_DECISION, TOOL_SPECS, ToolExecutor
 from northdesk_ticket_agent.domain.models import Ticket
 from northdesk_ticket_agent.services.datastore import DataStore
 
@@ -28,6 +28,16 @@ def test_bad_tool_calls_get_an_error_the_model_can_read(
 
     assert isinstance(result, dict)
     assert error in result["error"]
+
+
+def test_runs_every_tool_it_offers_and_no_other(datastore: DataStore, example_tickets: dict[str, Ticket]) -> None:
+    tools = ToolExecutor(datastore, example_tickets["T-1"])
+
+    offered = [spec.name for spec in TOOL_SPECS if spec.name != SUBMIT_DECISION]
+    assert offered
+    assert all(tools.knows(name) for name in offered)
+    assert not tools.knows(SUBMIT_DECISION)  # the agent handles it
+    assert not tools.knows("delete_customer")
 
 
 def test_get_customer_reports_an_unknown_customer(datastore: DataStore, example_tickets: dict[str, Ticket]) -> None:

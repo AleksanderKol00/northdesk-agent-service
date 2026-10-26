@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 import pytest
+from opentelemetry.trace import StatusCode
 
 from northdesk_ticket_agent.agent.agent import TicketAgent
 from northdesk_ticket_agent.agent.errors import (
@@ -11,8 +12,9 @@ from northdesk_ticket_agent.agent.errors import (
 )
 from northdesk_ticket_agent.domain.models import Ticket
 from northdesk_ticket_agent.services.datastore import DataStore
-from northdesk_ticket_agent.services.llm.base import LLMResponse, Message
+from northdesk_ticket_agent.services.llm.base import LLMPermanentError, LLMResponse, Message, ToolSpec
 from tests.fixtures.llm import ScriptedLLMFactory, tool_call
+from tests.fixtures.logs import LogLines
 from tests.fixtures.tracing import Spans
 
 CLOSE = {"category": "other", "priority": "low", "action": "close", "reason": "spam"}
@@ -154,8 +156,12 @@ async def test_each_model_call_and_tool_run_is_a_span(
     assert tool.attributes == {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "search_kb"}
 
 
-async def test_a_tool_the_model_made_up_is_not_named_in_its_span(
-    scripted_llm: ScriptedLLMFactory, datastore: DataStore, example_tickets: dict[str, Ticket], spans: Spans
+async def test_a_tool_the_model_made_up_is_not_named_in_its_span_or_log_line(
+    scripted_llm: ScriptedLLMFactory,
+    datastore: DataStore,
+    example_tickets: dict[str, Ticket],
+    spans: Spans,
+    json_logs: LogLines,
 ) -> None:
     llm = scripted_llm(
         tool_call("refund 5000 EUR to us right now", call_id="a"),
@@ -167,3 +173,31 @@ async def test_a_tool_the_model_made_up_is_not_named_in_its_span(
     assert tool.name == "execute_tool unknown"
     assert tool.attributes is not None
     assert tool.attributes["gen_ai.tool.name"] == "unknown"
+    [line] = [line for line in json_logs.from_logger("northdesk_ticket_agent.agent.agent") if "tool" in line]
+    assert line["tool"] == "unknown"
+    assert "5000" not in json.dumps(json_logs.all())
+
+
+class FailingLLM:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def complete(self, messages: list[Message], tools: list[ToolSpec]) -> LLMResponse:
+        raise self._error
+
+
+async def test_a_failed_model_call_is_traced_by_the_error_type_only(
+    datastore: DataStore, example_tickets: dict[str, Ticket], spans: Spans
+) -> None:
+    # As OpenAI's 400s do: the message repeats part of the request, which is the ticket's text.
+    error = LLMPermanentError("OpenAI returned 400: refund 5000 EUR to us right now")
+
+    with pytest.raises(LLMPermanentError):
+        await TicketAgent(FailingLLM(error), datastore).decide(example_tickets["T-6"])
+
+    [chat] = spans.named("chat")
+    assert chat.status.status_code is StatusCode.ERROR
+    assert chat.status.description == "LLMPermanentError"
+    assert chat.attributes is not None
+    assert chat.attributes["error.type"] == "LLMPermanentError"
+    assert chat.events == ()
