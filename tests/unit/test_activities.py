@@ -3,6 +3,7 @@ import logging
 import os
 import random
 import signal
+import traceback
 from collections.abc import Awaitable, Callable
 from decimal import Decimal
 
@@ -103,6 +104,9 @@ async def test_decide_unreadable_decision_is_not_retried(
 
     assert error.type == "DecisionParseError"
     assert error.non_retryable
+    # Raised while handling the ValidationError, which quotes the model's input: Temporal would store it as the cause.
+    assert error.__cause__ is None
+    assert "not json" not in "".join(traceback.format_exception(error))
 
 
 async def test_decide_step_limit_is_not_retried(
@@ -131,6 +135,22 @@ async def test_decide_llm_errors_keep_their_retryability(
     assert error.type == type(llm_error).__name__
     assert error.non_retryable is not retryable
     assert error.message == str(llm_error)
+
+
+async def test_decide_leaves_out_what_the_llm_error_was_raised_from(
+    datastore: DataStore, example_tickets: dict[str, Ticket]
+) -> None:
+    # Temporal stores an error's causes in the workflow's history, and the SDK logs them with the failed attempt.
+    try:
+        raise RuntimeError("OpenAI's message, repeating the ticket")
+    except RuntimeError as openai_error:
+        llm_error = LLMPermanentError("OpenAI returned 400")
+        llm_error.__cause__ = openai_error
+
+    error = await run_failing(activities(datastore, FailingLLM(llm_error)).decide, example_tickets["T-1"])
+
+    assert error.message == "OpenAI returned 400"
+    assert "repeating the ticket" not in "".join(traceback.format_exception(error))
 
 
 # check
@@ -184,7 +204,7 @@ async def test_check_fails_at_once_on_an_unexpected_error(
 
     assert error.type == "ArithmeticError"
     assert error.non_retryable
-    assert "49.99" not in error.message
+    assert "49.99" not in "".join(traceback.format_exception(error))
 
 
 async def test_check_uses_the_tickets_customer_for_ownership(

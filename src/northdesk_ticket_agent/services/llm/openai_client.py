@@ -39,19 +39,29 @@ class OpenAIClient:
                 tools=[to_openai_tool(t) for t in tools],
                 tool_choice="required",
             )
+        # The messages name the error, never quote it: OpenAI's may repeat the request, and so the ticket, and these
+        # end up in the workflow's history, the escalation's reason and the logs.
         except openai.APIConnectionError as exc:  # includes timeouts
-            raise LLMTransientError(f"OpenAI connection failed: {exc}") from exc
+            raise LLMTransientError(f"OpenAI connection failed: {type(exc).__name__}") from exc
         except openai.APIStatusError as exc:
             if exc.status_code in _TRANSIENT_STATUS or exc.status_code >= 500:
                 raise LLMTransientError(f"OpenAI returned {exc.status_code}") from exc
-            raise LLMPermanentError(f"OpenAI returned {exc.status_code}: {exc}") from exc
+            raise LLMPermanentError(_describe_status_error(exc)) from exc
         # Anything else (a response that doesn't match the schema, say): not worth retrying.
         except openai.OpenAIError as exc:
-            raise LLMPermanentError(f"OpenAI call failed: {exc}") from exc
+            raise LLMPermanentError(f"OpenAI call failed: {type(exc).__name__}") from exc
 
         if not completion.choices:
             raise LLMTransientError("OpenAI returned no choices")
         return from_openai_message(completion.choices[0].message)
+
+
+def _describe_status_error(exc: openai.APIStatusError) -> str:
+    """The status, OpenAI's error code (an identifier such as `invalid_api_key`) and the request ID, to look the call
+    up on OpenAI's side."""
+    code = f" {exc.code}" if exc.code else ""
+    request = f" (request {exc.request_id})" if exc.request_id else ""
+    return f"OpenAI returned {exc.status_code}{code}{request}"
 
 
 def to_openai_tool(tool: ToolSpec) -> ChatCompletionFunctionToolParam:
