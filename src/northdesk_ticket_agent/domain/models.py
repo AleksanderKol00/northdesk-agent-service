@@ -9,15 +9,16 @@ class Ticket(BaseModel):
     # It starts with a letter or digit, so it is never a dot segment ("." or ".."), which clients rewrite in a path.
     ticket_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
     customer_id: str
-    subject: str
-    body: str
+    # The whole ticket goes to the LLM, so its size is capped.
+    subject: str = Field(max_length=200)
+    body: str = Field(max_length=10_000)
 
 
 class Customer(BaseModel):
     customer_id: str
     name: str
-    plan: str
-    status: str
+    plan: Literal["free", "business", "enterprise"]
+    status: Literal["active", "suspended"]
 
 
 class Invoice(BaseModel):
@@ -25,7 +26,7 @@ class Invoice(BaseModel):
     customer_id: str
     month: str
     amount_eur: float
-    status: str
+    status: Literal["paid", "overdue"]
 
 
 class KbArticle(BaseModel):
