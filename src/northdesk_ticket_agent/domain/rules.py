@@ -100,7 +100,9 @@ def _check_refund(
             if invoice.status != "paid":
                 violations.append(f"invoice {invoice_id} is {invoice.status}, only paid invoices")
             if amount is not None and amount > invoice.amount_eur:
-                violations.append(f"refund {amount} EUR is larger than invoice {invoice_id} ({invoice.amount_eur} EUR)")
+                violations.append(
+                    f"refund {amount:.2f} EUR is larger than invoice {invoice_id} ({invoice.amount_eur:.2f} EUR)"
+                )
     if violations or not invoice_id or amount is None:
         return violations
     return RefundAction(invoice_id=invoice_id, amount_eur=amount)
