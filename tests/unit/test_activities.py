@@ -4,6 +4,7 @@ import os
 import random
 import signal
 from collections.abc import Awaitable, Callable
+from decimal import Decimal
 
 import pytest
 from temporalio.exceptions import ApplicationError
@@ -35,7 +36,7 @@ from northdesk_ticket_agent.services.llm.base import (
 from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
 from tests.fixtures.llm import ScriptedLLMFactory, tool_call
 
-REFUND = RefundAction(invoice_id="INV-1002", amount_eur=49.0)
+REFUND = RefundAction(invoice_id="INV-1002", amount_eur=Decimal("49.0"))
 
 
 class FailingLLM:
@@ -265,7 +266,7 @@ async def test_act_a_different_refund_on_the_same_ticket_is_not_retried(
     act = activities(datastore, helpdesk=helpdesk).act
     await ActivityEnvironment().run(act, ActInput(ticket_id="T-2", action=REFUND))
 
-    other = RefundAction(invoice_id="INV-1002", amount_eur=10.0)
+    other = RefundAction(invoice_id="INV-1002", amount_eur=Decimal("10.0"))
     error = await run_failing(act, ActInput(ticket_id="T-2", action=other))
 
     assert error.type == "HelpdeskConflictError"

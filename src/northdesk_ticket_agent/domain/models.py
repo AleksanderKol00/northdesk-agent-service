@@ -1,3 +1,4 @@
+from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Literal
 
@@ -14,6 +15,10 @@ class Ticket(BaseModel):
     body: str = Field(max_length=10_000)
 
 
+# Euros, exact to the cent. JSON carries it as a string ("49.0"), so no client turns it into a float.
+Money = Annotated[Decimal, Field(decimal_places=2)]
+
+
 class Customer(BaseModel):
     customer_id: str
     name: str
@@ -25,7 +30,7 @@ class Invoice(BaseModel):
     invoice_id: str
     customer_id: str
     month: str
-    amount_eur: float
+    amount_eur: Money
     status: Literal["paid", "overdue"]
 
 
@@ -59,9 +64,8 @@ class ActionType(StrEnum):
 class ProposedDecision(BaseModel):
     """What the model proposed, before any checks.
 
-    Fields are deliberately loose (plain strings, everything optional except the three
-    core fields) so that a wrong value is caught and reported by the rules instead of
-    being lost in a parse error.
+    Fields are deliberately loose (plain strings, a float amount, everything optional except the three core fields) so
+    that a wrong value is caught and reported by the rules instead of being lost in a parse error.
     """
 
     category: str
@@ -83,7 +87,7 @@ class ReplyAction(BaseModel):
 class RefundAction(BaseModel):
     type: Literal[ActionType.REFUND] = ActionType.REFUND
     invoice_id: str
-    amount_eur: float
+    amount_eur: Money
 
 
 class EscalateAction(BaseModel):

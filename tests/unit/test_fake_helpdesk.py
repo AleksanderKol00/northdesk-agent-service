@@ -1,4 +1,5 @@
 import random
+from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
@@ -7,7 +8,7 @@ from northdesk_ticket_agent.domain.models import Action, CloseAction, EscalateAc
 from northdesk_ticket_agent.services.fake_helpdesk import FakeHelpdesk
 from northdesk_ticket_agent.services.helpdesk import HelpdeskConflictError, HelpdeskTemporaryError
 
-REFUND = RefundAction(invoice_id="INV-1002", amount_eur=49.0)
+REFUND = RefundAction(invoice_id="INV-1002", amount_eur=Decimal("49.0"))
 
 
 class ScriptedRandom(random.Random):
@@ -58,7 +59,7 @@ async def test_different_keys_are_different_requests(helpdesk: FakeHelpdesk) -> 
 @pytest.mark.parametrize(
     ("ticket_id", "action"),
     [
-        ("T-2", RefundAction(invoice_id="INV-1002", amount_eur=1.0)),
+        ("T-2", RefundAction(invoice_id="INV-1002", amount_eur=Decimal("1.0"))),
         ("T-9", REFUND),
     ],
 )
@@ -124,18 +125,20 @@ async def test_conflict_is_reported_even_when_the_call_would_fail() -> None:
     await helpdesk.perform("T-2", REFUND, idempotency_key="T-2:act")
 
     with pytest.raises(HelpdeskConflictError):
-        await helpdesk.perform("T-2", RefundAction(invoice_id="INV-1002", amount_eur=1.0), idempotency_key="T-2:act")
+        await helpdesk.perform(
+            "T-2", RefundAction(invoice_id="INV-1002", amount_eur=Decimal("1.0")), idempotency_key="T-2:act"
+        )
 
 
 async def test_changing_a_returned_receipt_or_the_sent_action_does_not_change_the_record(
     helpdesk: FakeHelpdesk,
 ) -> None:
-    action = RefundAction(invoice_id="INV-1002", amount_eur=49.0)
+    action = RefundAction(invoice_id="INV-1002", amount_eur=Decimal("49.0"))
     receipt = await helpdesk.perform("T-2", action, idempotency_key="T-2:act")
 
-    action.amount_eur = 5000.0
+    action.amount_eur = Decimal(5000)
     assert isinstance(receipt.action, RefundAction)
-    receipt.action.amount_eur = 5000.0
+    receipt.action.amount_eur = Decimal(5000)
     with pytest.raises(ValidationError):
         receipt.reference = "RF-9999"  # type: ignore[misc]
 

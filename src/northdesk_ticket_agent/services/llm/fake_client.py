@@ -76,7 +76,7 @@ def _decide(text: str, results: dict[str, Any]) -> dict[str, Any]:
         invoice = (_duplicate_invoice(invoices) if double_charge else None) or invoices[0]
         amount = _mentioned_amount(text)
         if amount is None:
-            amount = invoice["amount_eur"]
+            amount = float(invoice["amount_eur"])  # sent as a string, to keep it exact
         return {
             "category": "billing",
             "priority": "high" if urgent else "normal",
@@ -128,7 +128,7 @@ def _escalate(category: str, priority: str, reason: str) -> dict[str, Any]:
 
 
 def _duplicate_invoice(invoices: list[dict[str, Any]]) -> dict[str, Any] | None:
-    seen: set[tuple[str, float]] = set()
+    seen: set[tuple[Any, Any]] = set()
     for invoice in invoices:
         key = (invoice["month"], invoice["amount_eur"])
         if key in seen:
