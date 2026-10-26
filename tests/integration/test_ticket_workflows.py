@@ -221,7 +221,8 @@ async def test_the_api_end_to_end(
     assert approved.status_code == 200
     assert status.status_code == 200
     assert status.json()["step"] == "done"
-    assert status.json()["receipt"]["action"]["type"] == "refund"
+    assert status.json()["action"]["type"] == "refund"
+    assert status.json()["helpdesk_reference"].startswith("RF-")
 
 
 async def test_one_filter_follows_a_ticket_end_to_end(

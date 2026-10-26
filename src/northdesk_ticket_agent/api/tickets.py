@@ -38,7 +38,7 @@ async def submit_ticket(ticket: Ticket, response: Response, workflows: Workflows
 async def get_ticket(ticket_id: TicketId, workflows: Workflows) -> TicketStatus:
     """The ticket's current step, its checked decision, and what was done."""
     state = await workflows.status(ticket_id)
-    return TicketStatus(workflow_id=ticket_id, **state.model_dump())
+    return TicketStatus.from_state(state)
 
 
 @router.post(
@@ -56,4 +56,4 @@ async def approve_refund(ticket_id: TicketId, approval: Approval, workflows: Wor
         "approved" if approval.approved else "rejected",
         extra={"approved": approval.approved, "action": state.action.type if state.action else None},
     )
-    return TicketStatus(workflow_id=ticket_id, **state.model_dump())
+    return TicketStatus.from_state(state)
