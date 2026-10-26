@@ -87,7 +87,6 @@ async def test_maps_tool_calls_and_sends_neutral_messages() -> None:
         status_error(429),
         status_error(500),
         status_error(503),
-        openai.APIResponseValidationError(response=httpx2.Response(200, request=REQUEST), body={}),
     ],
 )
 async def test_temporary_failures_are_transient(error: Exception) -> None:
@@ -96,9 +95,18 @@ async def test_temporary_failures_are_transient(error: Exception) -> None:
         await client.complete([Message(role="user", content="hi")], TOOLS)
 
 
-@pytest.mark.parametrize("status", [400, 401, 403, 404])
-async def test_request_errors_are_permanent(status: int) -> None:
-    client, _ = make_client(status_error(status))
+@pytest.mark.parametrize(
+    "error",
+    [
+        status_error(400),
+        status_error(401),
+        status_error(403),
+        status_error(404),
+        openai.APIResponseValidationError(response=httpx2.Response(200, request=REQUEST), body={}),
+    ],
+)
+async def test_other_failures_are_permanent(error: Exception) -> None:
+    client, _ = make_client(error)
     with pytest.raises(LLMPermanentError):
         await client.complete([Message(role="user", content="hi")], TOOLS)
 
