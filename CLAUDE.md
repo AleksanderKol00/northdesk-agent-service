@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Backend service (FastAPI, Python 3.14, managed with `uv`) that triages support tickets for Northdesk, a fictional software company. An LLM agent looks up the customer, their invoices and the knowledge base through tool calls and proposes what to do; code checks the proposal, refunds wait for a person, and a Temporal workflow carries each ticket from decision to action. The LLM and the Helpdesk can both fail transiently, so retries, idempotent actions and escalation with a clear reason are part of the design, not add-ons.
 
-Built so far: the decision agent, the decision checks, the fake Helpdesk client, the Temporal ticket workflow, activities and worker, the ticket API, and structured (JSON) logs. Docker Compose runs Temporal, the API and the worker. The full README is still to come.
+Built so far: the decision agent, the decision checks, the fake Helpdesk client, the Temporal ticket workflow, activities and worker, the ticket API, structured (JSON) logs and the README. Docker Compose runs Temporal, the API and the worker.
 
 ## Architecture
 
