@@ -2,6 +2,7 @@ import logging
 from functools import cache
 
 from temporalio.client import Client
+from temporalio.contrib.opentelemetry import TracingInterceptor
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.runtime import LogForwardingConfig, LoggingConfig, Runtime, TelemetryConfig, TelemetryFilter
 
@@ -13,11 +14,16 @@ CORE_LOGGER = "temporalio.core"
 
 
 async def connect(settings: Settings) -> Client:
-    """A Temporal client for the API and the worker, with the pydantic data converter the workflow's models need."""
+    """A Temporal client for the API and the worker, with the pydantic data converter the workflow's models need.
+
+    Its tracing interceptor applies to the worker built on it too: the API's start passes the trace context in the
+    workflow's headers, the workflow passes it on to the activities, and each gets a span in the same trace.
+    """
     return await Client.connect(
         settings.temporal_address,
         namespace=settings.temporal_namespace,
         data_converter=pydantic_data_converter,
+        interceptors=[TracingInterceptor()],
         runtime=_runtime(),
     )
 

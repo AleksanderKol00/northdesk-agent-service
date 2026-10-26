@@ -13,6 +13,7 @@ from northdesk_ticket_agent.domain.models import (
 from northdesk_ticket_agent.orchestration.models import Approval, Step
 from tests.fixtures.client import StubTicketWorkflows
 from tests.fixtures.logs import LogLines
+from tests.fixtures.tracing import Spans
 
 REFUND = RefundAction(invoice_id="INV-1002", amount_eur=Decimal("49.0"))
 
@@ -243,3 +244,15 @@ def test_an_unhandled_error_is_logged_with_the_ticket_and_answered_with_500(
     assert "RuntimeError: bug" in error["exception"]
     assert error["ticket_id"] == access["ticket_id"] == "T-1"
     assert access["status_code"] == 500
+
+
+def test_a_ticket_request_is_traced_by_its_route_and_the_health_check_is_not(
+    client: TestClient, spans: Spans, example_tickets: dict[str, Ticket]
+) -> None:
+    client.get("/health")
+    client.get(f"/tickets/{example_tickets['T-1'].ticket_id}")
+
+    [span] = spans.all()
+    assert span.name == "GET /tickets/{ticket_id}"
+    assert span.attributes is not None
+    assert span.attributes["http.route"] == "/tickets/{ticket_id}"

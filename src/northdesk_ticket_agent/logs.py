@@ -11,7 +11,8 @@ from three places, later ones winning on a clash:
   agent's and the Helpdesk's lines carry the ticket's IDs without knowing about them.
 - `extra={...}` on the call itself.
 
-Following a ticket end to end is then one filter, e.g. `jq 'select(.ticket_id == "T-2")'`.
+Following a ticket end to end is then one filter, e.g. `jq 'select(.ticket_id == "T-2")'`. A line logged inside an
+OpenTelemetry span also carries its `trace_id` and `span_id` (see `tracing.py`), which lead from the line to the trace.
 
 Ticket text is untrusted and may hold personal data: log IDs, types and counts, never the subject, body or reply.
 Libraries that may log payloads at DEBUG (`LIBRARY_LOGGERS`) are kept at INFO, so `LOG_LEVEL=DEBUG` adds only our lines.
@@ -25,6 +26,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any, Literal, TextIO
+
+from opentelemetry import trace
 
 type LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -82,6 +85,7 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
+        line |= _trace_ids()
         line |= _temporal_ids(record)
         line |= _core_fields(record)
         # Read when the line is formatted, which a stream handler does in the caller's thread and context.
@@ -116,6 +120,14 @@ def configure_logging(level: LogLevel = "INFO", stream: TextIO | None = None) ->
     for name in LIBRARY_LOGGERS:
         # At any other level the root's level applies, as for every other logger.
         logging.getLogger(name).setLevel(logging.INFO if level == "DEBUG" else logging.NOTSET)
+
+
+def _trace_ids() -> dict[str, Any]:
+    """The current span's IDs, in the hex form tracing backends show and search by."""
+    span = trace.get_current_span().get_span_context()
+    if not span.is_valid:
+        return {}
+    return {"trace_id": trace.format_trace_id(span.trace_id), "span_id": trace.format_span_id(span.span_id)}
 
 
 def _core_fields(record: logging.LogRecord) -> dict[str, Any]:

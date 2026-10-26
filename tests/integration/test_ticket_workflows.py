@@ -29,6 +29,7 @@ from northdesk_ticket_agent.services.datastore import DataStore
 from northdesk_ticket_agent.services.fake_helpdesk import FakeHelpdesk
 from northdesk_ticket_agent.services.llm.fake_client import FakeLLMClient
 from tests.fixtures.logs import LogLines
+from tests.fixtures.tracing import Spans
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -280,3 +281,52 @@ async def test_a_failed_activity_is_logged_with_the_ticket(
     assert escalated["level"] == "WARNING"
     assert escalated["error"] == "UnknownCustomerError"
     assert "reason" not in escalated
+
+
+async def test_one_trace_follows_a_ticket_from_the_api_to_each_activity(
+    temporal_workflows: TemporalTicketWorkflows, example_tickets: dict[str, Ticket], spans: Spans, json_logs: LogLines
+) -> None:
+    ticket = fresh(example_tickets["T-2"])
+    app = create_app(temporal_workflows)
+
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://api") as api,
+    ):
+        await api.post("/tickets", json=ticket.model_dump())
+        await wait_for_step(temporal_workflows, ticket.ticket_id, Step.AWAITING_APPROVAL)
+        await api.post(f"/tickets/{ticket.ticket_id}/approval", json={"approved": True})
+        await wait_for_step(temporal_workflows, ticket.ticket_id, Step.DONE)
+
+    [post] = spans.named("POST /tickets")
+    assert post.context is not None
+    names = [span.name for span in spans.in_trace(post.context.trace_id)]
+    assert set(names) >= {
+        "StartWorkflow:TicketWorkflow",
+        "RunWorkflow:TicketWorkflow",
+        "StartActivity:ticket.decide",
+        "RunActivity:ticket.decide",
+        "chat",
+        "execute_tool get_invoices",
+        "RunActivity:ticket.check",
+        "RunActivity:ticket.act",
+    }
+    # The approval is a request of its own, with a trace of its own. The workflow handles it in the ticket's trace,
+    # linked back to the request.
+    [approval] = spans.named("POST /tickets/{ticket_id}/approval")
+    assert approval.context is not None
+    assert approval.context.trace_id != post.context.trace_id
+    assert "StartWorkflowUpdate:approve" in [span.name for span in spans.in_trace(approval.context.trace_id)]
+    [handled] = spans.named("HandleUpdate:approve")
+    assert handled.context is not None
+    assert handled.context.trace_id == post.context.trace_id
+    assert [link.context.trace_id for link in handled.links] == [approval.context.trace_id]
+    # The log lines lead to the trace: the API's and the activities' lines carry its ID.
+    trace_id = f"{post.context.trace_id:032x}"
+    traced = {line["logger"] for line in json_logs.about(ticket.ticket_id) if line.get("trace_id") == trace_id}
+    assert traced >= {
+        "northdesk_ticket_agent.api.access_log",
+        "temporalio.activity",
+        "northdesk_ticket_agent.agent.agent",
+        "northdesk_ticket_agent.services.fake_helpdesk",
+    }

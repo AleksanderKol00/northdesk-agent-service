@@ -3,6 +3,8 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest_asyncio
+from temporalio.client import Client
+from temporalio.contrib.opentelemetry import TracingInterceptor
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
@@ -51,10 +53,14 @@ async def isolated_workflow_env() -> AsyncIterator[WorkflowEnvironment]:
 async def temporal_workflows(
     workflow_env: WorkflowEnvironment, datastore: DataStore, helpdesk: FakeHelpdesk
 ) -> AsyncIterator[TemporalTicketWorkflows]:
-    """`TemporalTicketWorkflows` on the test server, with a worker running the real activities and the fake LLM."""
+    """`TemporalTicketWorkflows` on the test server, with a worker running the real activities and the fake LLM.
+
+    Its client traces like `connect`'s, so the spans reach the `spans` fixture once a test asks for it.
+    """
     task_queue = f"test-{uuid.uuid4()}"
+    config = workflow_env.client.config()
+    config["interceptors"] = [TracingInterceptor()]
+    client = Client(**config)
     activities = TicketActivities(TicketAgent(FakeLLMClient(), datastore), datastore, helpdesk)
-    async with Worker(
-        workflow_env.client, task_queue=task_queue, workflows=[TicketWorkflow], activities=activities.all()
-    ):
-        yield TemporalTicketWorkflows(workflow_env.client, task_queue)
+    async with Worker(client, task_queue=task_queue, workflows=[TicketWorkflow], activities=activities.all()):
+        yield TemporalTicketWorkflows(client, task_queue)
